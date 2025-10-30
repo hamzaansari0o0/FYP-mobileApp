@@ -27,8 +27,25 @@ export default function OwnerLayout() {
           ),
         }}
       />
+      
+      {/* --- YAHAN NAYA TAB ADD HUA HAI --- */}
       <Tabs.Screen
-        name="profile" // Note: Ye file aap ne abhi di nahi hai, lekin layout mein add kar di hai
+        name="myCourt" // Ye app/(owner)/myCourt.jsx file ko dhoondega
+        options={{
+          title: 'My Court',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? 'football' : 'football-outline'}
+              size={size}
+              color={color}
+            />
+          ),
+        }}
+      />
+      {/* ---------------------------------- */}
+      
+      <Tabs.Screen
+        name="profile"
         options={{
           title: 'Owner Profile',
           tabBarIcon: ({ color, size, focused }) => (

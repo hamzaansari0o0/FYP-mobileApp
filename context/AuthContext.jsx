@@ -15,46 +15,64 @@ const AuthContext = createContext();
 // 2. Provider component banana
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null); // Firebase Auth object
-  const [userData, setUserData] = useState(null); // <-- YEH WALI STATE NULL THI
+  const [userData, setUserData] = useState(null); // Firestore data
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // User ki auth state sunna (Saada version)
+  // User ki auth state sunna
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        await user.reload(); 
-        if (user.emailVerified) {
-          // --- User Verified Hai ---
-          const userDoc = await getDoc(doc(db, 'users', user.uid));
-          if (userDoc.exists()) {
-            
-            // --- YAHAN FIX KIYA GAYA HAI ---
-            const userDataFromDb = userDoc.data();
-            setRole(userDataFromDb.role);
-            setUserData(userDataFromDb); // <-- YEH LINE MISSING THI
-            setUser(user);
-            // -------------------------------
+      
+      // --- YAHAN SE UPDATE SHURU HUA HAI ---
+      // try...catch...finally block add kiya hai
+      try {
+        if (user) {
+          await user.reload(); 
+          if (user.emailVerified) {
+            // --- User Verified Hai ---
+            const userDoc = await getDoc(doc(db, 'users', user.uid));
+            if (userDoc.exists()) {
+              
+              const userDataFromDb = userDoc.data();
+              setRole(userDataFromDb.role);
+              setUserData(userDataFromDb); // <-- Ye fix pehle se mojood tha
+              setUser(user);
 
+            } else {
+              // User auth mein hai lekin database mein nahi (Error case)
+              console.log('User data not found in Firestore, logging out.');
+              setUser(null);
+              setUserData(null);
+              setRole(null);
+              await signOut(auth); // Safety logout
+            }
           } else {
-            console.log('User data not found in Firestore');
+            // --- User Verified Nahi Hai ---
+            console.log('User is not verified, treating as logged out.');
             setUser(null);
+            setRole(null);
+            setUserData(null);
           }
         } else {
-          // --- User Verified Nahi Hai ---
-          console.log('User is not verified, treating as logged out.');
+          // User login nahi hai
           setUser(null);
           setRole(null);
-          setUserData(null); // <-- YAHAN BHI ADD KIYA (Safai ke liye)
+          setUserData(null);
         }
-      } else {
-        // User login nahi hai
+      } catch (error) {
+        // Agar (await user.reload) ya (await getDoc) mein koi error aye
+        console.error("Error in onAuthStateChanged: ", error);
         setUser(null);
         setRole(null);
-        setUserData(null); // <-- YAHAN BHI ADD KIYA (Safai ke liye)
+        setUserData(null);
+      } finally {
+        // Ye har haal mein chalega
+        // Aur loading ko false karega ta ke app "stuck" na ho
+        setLoading(false);
       }
-      setLoading(false);
+      // --- YAHAN PAR UPDATE KHATAM HUA HAI ---
     });
+    
     return () => unsubscribe(); 
   }, []);
 
@@ -101,7 +119,7 @@ export function AuthProvider({ children }) {
   // Context ki value (Ab userData export karega)
   const value = {
     user,
-    userData, // <-- Ab ye 'null' nahi, balke data ke sath jayega
+    userData, // <-- Ye ab 'null' nahi, balke data ke sath ayega
     role,
     loading,
     login,

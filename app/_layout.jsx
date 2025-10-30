@@ -20,11 +20,14 @@ function RootLayoutNav() {
       // Check karein ke role ke mutabiq sahi group mein hai ya nahi
       const inPlayerGroup = segments[0] === '(player)';
       const inOwnerGroup = segments[0] === '(owner)';
+      const inAdminGroup = segments[0] === '(admin)';
 
       if (role === 'player' && !inPlayerGroup) {
         router.replace('/(player)/home');
       } else if (role === 'owner' && !inOwnerGroup) {
         router.replace('/(owner)/dashboard');
+      }else if (role === 'admin' && !inAdminGroup) { // <-- Ye block add karein
+        router.replace('/(admin)/dashboard');
       }
       // (Admin logic yahan add ho sakta hai)
       
