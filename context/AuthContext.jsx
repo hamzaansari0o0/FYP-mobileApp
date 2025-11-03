@@ -22,9 +22,7 @@ export function AuthProvider({ children }) {
   // User ki auth state sunna
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      
-      // --- YAHAN SE UPDATE SHURU HUA HAI ---
-      // try...catch...finally block add kiya hai
+      // "Loading Stuck" fix
       try {
         if (user) {
           await user.reload(); 
@@ -32,19 +30,25 @@ export function AuthProvider({ children }) {
             // --- User Verified Hai ---
             const userDoc = await getDoc(doc(db, 'users', user.uid));
             if (userDoc.exists()) {
-              
               const userDataFromDb = userDoc.data();
-              setRole(userDataFromDb.role);
-              setUserData(userDataFromDb); // <-- Ye fix pehle se mojood tha
-              setUser(user);
-
+              
+              // Pehle se login user ke liye "Disabled" check
+              if (userDataFromDb.status === 'disabled') {
+                console.log('User is disabled, logging out.');
+                await signOut(auth); // User ko login nahi karne dena
+                setUser(null);
+                setUserData(null);
+                setRole(null);
+              } else {
+                // User theek hai, login process continue karein
+                setRole(userDataFromDb.role);
+                setUserData(userDataFromDb); 
+                setUser(user);
+              }
             } else {
-              // User auth mein hai lekin database mein nahi (Error case)
               console.log('User data not found in Firestore, logging out.');
+              await signOut(auth);
               setUser(null);
-              setUserData(null);
-              setRole(null);
-              await signOut(auth); // Safety logout
             }
           } else {
             // --- User Verified Nahi Hai ---
@@ -60,17 +64,14 @@ export function AuthProvider({ children }) {
           setUserData(null);
         }
       } catch (error) {
-        // Agar (await user.reload) ya (await getDoc) mein koi error aye
         console.error("Error in onAuthStateChanged: ", error);
         setUser(null);
         setRole(null);
         setUserData(null);
       } finally {
-        // Ye har haal mein chalega
-        // Aur loading ko false karega ta ke app "stuck" na ho
+        // App ko "stuck" hone se bachayein
         setLoading(false);
       }
-      // --- YAHAN PAR UPDATE KHATAM HUA HAI ---
     });
     
     return () => unsubscribe(); 
@@ -88,6 +89,7 @@ export function AuthProvider({ children }) {
       role: selectedRole,
       mobileNumber: mobileNumber,
       city: city,
+      status: "active", // <-- NAYA: Har naya user "active" hota hai
       createdAt: new Date(),
     };
     await setDoc(doc(db, 'users', newUser.uid), newUserData);
@@ -99,16 +101,37 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Login function (ye bilkul theek hai)
+  // --- YAHAN SE "LOGIN" FUNCTION UPDATE HUA HAI ---
+  // (Ye "disable" check ko login ke waqt hi pakar lega)
   const login = async (email, password) => {
+    // 1. Pehle user ko login karwayein
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    await userCredential.user.reload();
-    const freshUser = auth.currentUser;
-    if (!freshUser.emailVerified) {
+    const loggedInUser = userCredential.user;
+
+    // 2. Email verification check karein
+    await loggedInUser.reload();
+    if (!loggedInUser.emailVerified) {
       await signOut(auth);
       throw new Error("auth/email-not-verified");
     }
+
+    // 3. (NAYA FIX) Database se check karein ke user "disabled" to nahi
+    const userDoc = await getDoc(doc(db, 'users', loggedInUser.uid));
+    if (!userDoc.exists()) {
+      await signOut(auth);
+      throw new Error("auth/user-not-found-in-db");
+    }
+    
+    const userData = userDoc.data();
+    if (userData.status === 'disabled') {
+      // Agar disabled hai, to foran logout karein aur error dein
+      await signOut(auth);
+      throw new Error("auth/user-disabled");
+    }
+    
+    // Agar sab theek hai, to onAuthStateChanged baqi kaam kar lega
   };
+  // --- YAHAN PAR "LOGIN" UPDATE KHATAM HUA HAI ---
 
   // Logout function
   const logout = async () => {
@@ -119,7 +142,7 @@ export function AuthProvider({ children }) {
   // Context ki value (Ab userData export karega)
   const value = {
     user,
-    userData, // <-- Ye ab 'null' nahi, balke data ke sath ayega
+    userData,
     role,
     loading,
     login,

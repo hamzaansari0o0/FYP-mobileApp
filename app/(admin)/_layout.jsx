@@ -3,7 +3,7 @@ import { Tabs } from 'expo-router';
 import tw from 'twrnc';
 import { Ionicons } from '@expo/vector-icons';
 
-export default function AdminLayout() {
+export default function AdminTabLayout() {
   return (
     <Tabs
       screenOptions={{
@@ -14,8 +14,9 @@ export default function AdminLayout() {
         tabBarLabelStyle: tw`text-xs font-medium mb-1`,
       }}
     >
+      {/* Tab 1: Dashboard (Ye dashboard/ folder ko kholay ga) */}
       <Tabs.Screen
-        name="dashboard" // app/(admin)/dashboard.jsx
+        name="dashboard" // Ye app/(admin)/dashboard/ folder ko target karega
         options={{
           title: 'Dashboard',
           tabBarIcon: ({ color, size, focused }) => (
@@ -23,8 +24,10 @@ export default function AdminLayout() {
           ),
         }}
       />
+      
+      {/* Tab 2: Approvals */}
       <Tabs.Screen
-        name="approvals" // app/(admin)/approvals.jsx
+        name="approvals" // Ye app/(admin)/approvals.jsx ko target karega
         options={{
           title: 'Approvals',
           tabBarIcon: ({ color, size, focused }) => (
@@ -33,9 +36,20 @@ export default function AdminLayout() {
         }}
       />
       
-      {/* --- YAHAN NAYA TAB ADD HUA HAI --- */}
+      {/* Tab 3: Transactions (Naya) */}
       <Tabs.Screen
-        name="profile" // Ye app/(admin)/profile.jsx file ko dhoondega
+        name="transactions" // Ye app/(admin)/transactions.jsx ko target karega
+        options={{
+          title: 'Transactions',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? 'cash' : 'cash-outline'} size={size} color={color} />
+          ),
+        }}
+      />
+      
+      {/* Tab 4: Profile */}
+      <Tabs.Screen
+        name="profile" // Ye app/(admin)/profile.jsx ko target karega
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, size, focused }) => (
@@ -43,8 +57,6 @@ export default function AdminLayout() {
           ),
         }}
       />
-      {/* ---------------------------------- */}
-      
     </Tabs>
   );
 }

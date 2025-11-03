@@ -4,20 +4,18 @@ import { Link } from 'expo-router';
 import tw from 'twrnc';
 import { Ionicons } from '@expo/vector-icons';
 
-// Ye component props mein 'court' object lega
 export default function CourtCard({ court }) {
-  // 'court' object mein court.id, court.courtName, etc. hai
   return (
-    // Link component user ko details screen par le jayega
-    <Link href={`/(player)/${court.id}`} asChild>
+    // --- YAHAN LINK UPDATE HUA HAI ---
+    // Pehle: href={`/(player)/${court.id}`}
+    // Ab:     href={`/home/${court.id}`} 
+    // (Kyunke ye home stack ke andar hai)
+    <Link href={`/home/${court.id}`} asChild> 
       <Pressable style={tw`bg-white p-4 rounded-xl shadow-md mb-4`}>
         <View style={tw`flex-row items-center`}>
-          {/* Icon */}
           <View style={tw`bg-green-100 p-3 rounded-lg`}>
             <Ionicons name="football-outline" size={24} color={tw.color('green-700')} />
           </View>
-          
-          {/* Court Details */}
           <View style={tw`ml-4 flex-1`}>
             <Text style={tw`text-lg font-bold text-gray-800`} numberOfLines={1}>
               {court.courtName}
@@ -27,8 +25,6 @@ export default function CourtCard({ court }) {
             </Text>
           </View>
         </View>
-        
-        {/* Price */}
         <View style={tw`mt-4 pt-3 border-t border-gray-100`}>
           <Text style={tw`text-lg font-bold text-green-700`}>
             Rs. {court.pricePerHour} 

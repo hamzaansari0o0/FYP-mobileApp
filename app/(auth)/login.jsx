@@ -27,9 +27,13 @@ export default function Login() {
       // Agar kamyab hua, to onAuthStateChanged redirection kar dega
       
     } catch (e) {
-      // --- YAHAN NAYA ERROR CHECK ADD HUA HAI ---
+      // --- YAHAN ERROR MESSAGES UPDATE HUAY HAIN ---
       console.log('Login Error:', e.message); 
-      if (e.message === 'auth/email-not-verified') {
+      
+      if (e.message === 'auth/user-disabled') {
+        setError('Your account has been disabled by an admin.');
+      } 
+      else if (e.message === 'auth/email-not-verified') {
         setError('Please verify your email before logging in.');
       } else if (e.code === 'auth/user-not-found' || e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential') {
         setError('Invalid email or password.');
@@ -38,6 +42,7 @@ export default function Login() {
       } else {
         setError('Login failed. Please try again.');
       }
+      // ---------------------------------------------
     } finally {
       setLoading(false);
     }
