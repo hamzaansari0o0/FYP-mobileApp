@@ -5,7 +5,9 @@ import tw from 'twrnc';
 import { useAuth } from '../../../context/AuthContext';
 import { db } from '../../../firebase/firebaseConfig';
 import { collection, query, where, getDocs, limit } from 'firebase/firestore';
-import { useRouter, useFocusEffect } from 'expo-router'; // useFocusEffect import karein
+import { useRouter, useFocusEffect } from 'expo-router'; 
+// Naya component import karein
+import CourtRegistrationForm from '../../../components/specific/CourtRegistrationForm'; 
 
 // Ye file ab app/(owner)/myCourt/index.jsx hai
 
@@ -14,7 +16,7 @@ export default function MyCourtScreen() {
   const router = useRouter(); 
   const [loading, setLoading] = useState(true);
   const [userCourt, setUserCourt] = useState(null); 
-  const [courtDocId, setCourtDocId] = useState(null); // Court ki document ID
+  const [courtDocId, setCourtDocId] = useState(null); 
 
   // useFocusEffect istemal karein ta ke jab user edit kar ke wapis aye to data refresh ho
   useFocusEffect(
@@ -54,8 +56,6 @@ export default function MyCourtScreen() {
   // --- NAVIGATION (EDIT BUTTON) HANDLER ---
   const handleEditCourt = () => {
       if (courtDocId) {
-          // 'myCourt' stack ke andar 'edit' screen par jayein
-          // aur 'courtId' ko as parameter bhej dein
           router.push({
             pathname: '/myCourt/edit',
             params: { courtId: courtDocId } 
@@ -65,7 +65,14 @@ export default function MyCourtScreen() {
       }
   };
 
-  // UI 1: Loading
+  // --- NAYA FUNCTION: Jab naya form submit ho jaye ---
+  const handleRegistrationSuccess = (newId, newData) => {
+    // State update karein ta ke UI "View Details" par switch ho jaye
+    setCourtDocId(newId);
+    setUserCourt(newData);
+  };
+
+  // --- UI 1: Loading ---
   if (loading) {
     return (
       <SafeAreaView style={tw`flex-1 items-center justify-center bg-gray-100`}>
@@ -74,7 +81,7 @@ export default function MyCourtScreen() {
     );
   }
 
-  // UI 2: Court Mojood Hai (View Details)
+  // --- UI 2: Court Mojood Hai (View Details) ---
   if (userCourt) {
     const statusColor = userCourt.status === 'approved' ? 'bg-green-100 border-green-500' :
                         userCourt.status === 'pending' ? 'bg-yellow-100 border-yellow-500' :
@@ -102,9 +109,10 @@ export default function MyCourtScreen() {
 
           <Text style={tw`text-2xl font-semibold text-gray-700`}>{userCourt.courtName}</Text>
           <Text style={tw`text-lg text-gray-600 mt-2`}>{userCourt.address}</Text>
-          <Text style={tw`text-lg font-semibold text-gray-600 mt-2`}>
-            Hours: {userCourt.openTime || 'N/A'} - {userCourt.closeTime || 'N/A'}
-          </Text>
+          <Text style={tw`text-lg font-semibold text-gray-600 mt-2 p-2 bg-gray-200 rounded-lg`}>
+            Operating Hours: 24/7 (All slots)
+          </Text>
+
           <Text style={tw`text-xl font-bold text-green-700 mt-4`}>
             Rs. {userCourt.pricePerHour}
             <Text style={tw`text-base font-normal text-gray-500`}> / hour</Text>
@@ -123,18 +131,14 @@ export default function MyCourtScreen() {
     );
   }
 
-  // UI 3: Court Mojood Nahi Hai (Register Form)
-  // (Yahan aap ka poora Register Form ayega)
+  // --- UI 3: Court Mojood Nahi Hai (Register Form Component) ---
   return (
     <SafeAreaView style={tw`flex-1 bg-gray-100`}>
-      <ScrollView contentContainerStyle={tw`p-6`}>
-        <Text style={tw`text-3xl font-bold text-gray-800 mb-6`}>Register Your Court</Text>
-        {/* ... (Aap ka poora registration form yahan paste karein) ... */}
-        {/* ... (Jisme courtName, address, price, time pickers, bank details hain) ... */}
-        <Text style={tw`text-center text-gray-600`}>
-          (Yahan aap ka court registration form ayega)
-        </Text>
-      </ScrollView>
+      {/* Naya component yahan call ho raha hai */}
+      <CourtRegistrationForm 
+        user={user} 
+        onRegistrationSuccess={handleRegistrationSuccess} 
+      />
     </SafeAreaView>
   );
 }

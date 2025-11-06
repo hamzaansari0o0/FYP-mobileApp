@@ -1,59 +1,90 @@
-import React from 'react';
-import { Tabs } from 'expo-router';
-import tw from 'twrnc';
-import { Ionicons } from '@expo/vector-icons';
+import React from "react";
+import { Tabs } from "expo-router";
+import tw from "twrnc";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function AdminTabLayout() {
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: tw.color('purple-600'), // Admin ka theme
-        tabBarInactiveTintColor: tw.color('gray-400'),
+        tabBarActiveTintColor: tw.color("purple-600"), // Admin theme
+        tabBarInactiveTintColor: tw.color("gray-400"),
         tabBarStyle: tw`bg-white border-t border-gray-200 pt-2`,
         tabBarLabelStyle: tw`text-xs font-medium mb-1`,
       }}
     >
-      {/* Tab 1: Dashboard (Ye dashboard/ folder ko kholay ga) */}
+      {/* 🟣 Tab 1: Dashboard */}
       <Tabs.Screen
-        name="dashboard" // Ye app/(admin)/dashboard/ folder ko target karega
+        name="dashboard"
         options={{
-          title: 'Dashboard',
+          title: "Dashboard",
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? 'stats-chart' : 'stats-chart-outline'} size={size} color={color} />
+            <Ionicons
+              name={focused ? "stats-chart" : "stats-chart-outline"}
+              size={size}
+              color={color}
+            />
           ),
         }}
       />
-      
-      {/* Tab 2: Approvals */}
+
+      {/* 🟣 Tab 2: Approvals */}
       <Tabs.Screen
-        name="approvals" // Ye app/(admin)/approvals.jsx ko target karega
+        name="approvals"
         options={{
-          title: 'Approvals',
+          title: "Approvals",
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? 'shield-checkmark' : 'shield-checkmark-outline'} size={size} color={color} />
+            <Ionicons
+              name={focused ? "shield-checkmark" : "shield-checkmark-outline"}
+              size={size}
+              color={color}
+            />
           ),
         }}
       />
-      
-      {/* Tab 3: Transactions (Naya) */}
+
+      {/* 🟣 Tab 3: Payouts */}
       <Tabs.Screen
-        name="transactions" // Ye app/(admin)/transactions.jsx ko target karega
+        name="payouts"
         options={{
-          title: 'Transactions',
+          title: "Payouts",
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? 'cash' : 'cash-outline'} size={size} color={color} />
+            <Ionicons
+              name={focused ? "card" : "card-outline"}
+              size={size}
+              color={color}
+            />
           ),
         }}
       />
-      
-      {/* Tab 4: Profile */}
+
+      {/* 🟣 Tab 4: Transactions */}
       <Tabs.Screen
-        name="profile" // Ye app/(admin)/profile.jsx ko target karega
+        name="transactions"
         options={{
-          title: 'Profile',
+          title: "Transactions",
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? 'person-circle' : 'person-circle-outline'} size={size} color={color} />
+            <Ionicons
+              name={focused ? "cash" : "cash-outline"}
+              size={size}
+              color={color}
+            />
+          ),
+        }}
+      />
+
+      {/* 🟣 Tab 5: Profile */}
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: "Profile",
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "person-circle" : "person-circle-outline"}
+              size={size}
+              color={color}
+            />
           ),
         }}
       />
