@@ -1,25 +1,40 @@
-import { Stack } from 'expo-router';
-import React from 'react';
+import React from "react";
+import { Stack } from "expo-router";
 
 export default function MyCourtStackLayout() {
-  // Ye layout "My Court" tab ke andar 2 screens manage karega:
-  // 1. index.jsx (Details)
-  // 2. edit.jsx (Edit Form)
+  // This layout manages 3 screens:
+  // 1. index.jsx (Court Details)
+  // 2. edit.jsx (Edit Court Info)
+  // 3. maintenance.jsx (Slot Availability Management)
+
   return (
     <Stack>
-      <Stack.Screen 
+      {/* Court Details Screen */}
+      <Stack.Screen
         name="index" // app/(owner)/myCourt/index.jsx
-        options={{ 
-          headerShown: false // Details screen par header nahi dikhana
-        }} 
+        options={{
+          headerShown: false, // Hide header on main details screen
+        }}
       />
-      <Stack.Screen 
+
+      {/* Edit Court Screen */}
+      <Stack.Screen
         name="edit" // app/(owner)/myCourt/edit.jsx
         options={{
-          headerShown: true, // Edit screen par header dikhana hai
-          title: 'Edit Court Details',
-          presentation: 'modal', // Ta ke ye screen neechay se oopar aye
-        }} 
+          headerShown: true,
+          title: "Edit Court Details",
+          presentation: "modal", // Opens like a modal
+        }}
+      />
+
+      {/* Slot Maintenance Screen */}
+      <Stack.Screen
+        name="maintenance" // app/(owner)/myCourt/maintenance.jsx
+        options={{
+          headerShown: true,
+          title: "Manage Slot Availability",
+          presentation: "modal", // Opens as modal too
+        }}
       />
     </Stack>
   );

@@ -1,24 +1,22 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, Pressable, Alert, ActivityIndicator, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
 import { useAuth } from '../../../context/AuthContext';
 import { db } from '../../../firebase/firebaseConfig';
 import { collection, query, where, getDocs, limit } from 'firebase/firestore';
-import { useRouter, useFocusEffect } from 'expo-router'; 
-// Naya component import karein
-import CourtRegistrationForm from '../../../components/specific/CourtRegistrationForm'; 
-
-// Ye file ab app/(owner)/myCourt/index.jsx hai
+import { useRouter, useFocusEffect } from 'expo-router';
+import CourtRegistrationForm from '../../../components/specific/CourtRegistrationForm';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function MyCourtScreen() {
   const { user } = useAuth();
-  const router = useRouter(); 
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [userCourt, setUserCourt] = useState(null); 
-  const [courtDocId, setCourtDocId] = useState(null); 
+  const [userCourt, setUserCourt] = useState(null);
+  const [courtDocId, setCourtDocId] = useState(null);
 
-  // useFocusEffect istemal karein ta ke jab user edit kar ke wapis aye to data refresh ho
+  // Re-check court data whenever screen gains focus
   useFocusEffect(
     useCallback(() => {
       if (user) {
@@ -40,7 +38,7 @@ export default function MyCourtScreen() {
       if (!querySnapshot.empty) {
         const doc = querySnapshot.docs[0];
         setUserCourt(doc.data());
-        setCourtDocId(doc.id); // Court ID save karein
+        setCourtDocId(doc.id);
       } else {
         setUserCourt(null);
         setCourtDocId(null);
@@ -52,22 +50,31 @@ export default function MyCourtScreen() {
       setLoading(false);
     }
   };
-    
-  // --- NAVIGATION (EDIT BUTTON) HANDLER ---
+
   const handleEditCourt = () => {
-      if (courtDocId) {
-          router.push({
-            pathname: '/myCourt/edit',
-            params: { courtId: courtDocId } 
-          });
-      } else {
-          Alert.alert("Error", "Court ID not found.");
-      }
+    if (courtDocId) {
+      router.push({
+        pathname: '/myCourt/edit',
+        params: { courtId: courtDocId },
+      });
+    } else {
+      Alert.alert('Error', 'Court ID not found.');
+    }
   };
 
-  // --- NAYA FUNCTION: Jab naya form submit ho jaye ---
+  // Navigate to Manage Slots (new feature)
+  const handleManageSlots = () => {
+    if (courtDocId) {
+      router.push({
+        pathname: '/myCourt/maintenance',
+        params: { courtId: courtDocId },
+      });
+    } else {
+      Alert.alert('Error', 'Court ID not found.');
+    }
+  };
+
   const handleRegistrationSuccess = (newId, newData) => {
-    // State update karein ta ke UI "View Details" par switch ho jaye
     setCourtDocId(newId);
     setUserCourt(newData);
   };
@@ -81,49 +88,74 @@ export default function MyCourtScreen() {
     );
   }
 
-  // --- UI 2: Court Mojood Hai (View Details) ---
+  // --- UI 2: Court exists (show details) ---
   if (userCourt) {
-    const statusColor = userCourt.status === 'approved' ? 'bg-green-100 border-green-500' :
-                        userCourt.status === 'pending' ? 'bg-yellow-100 border-yellow-500' :
-                        'bg-red-100 border-red-500';
-    const statusText = userCourt.status.charAt(0).toUpperCase() + userCourt.status.slice(1);
+    const statusColor =
+      userCourt.status === 'approved'
+        ? 'bg-green-100 border-green-500'
+        : userCourt.status === 'pending'
+        ? 'bg-yellow-100 border-yellow-500'
+        : 'bg-red-100 border-red-500';
+
+    const statusText =
+      userCourt.status.charAt(0).toUpperCase() + userCourt.status.slice(1);
 
     return (
       <SafeAreaView style={tw`flex-1 bg-gray-100 p-5`}>
         <ScrollView>
-          <Text style={tw`text-3xl font-bold text-gray-800 mb-6`}>My Court Details</Text>
-          
+          <Text style={tw`text-3xl font-bold text-gray-800 mb-6`}>
+            My Court Details
+          </Text>
+
           <View style={tw`p-4 border-l-4 rounded-md ${statusColor} mb-6`}>
-            <Text style={tw`text-lg font-bold text-gray-700`}>Status: {statusText}</Text>
-            {userCourt.status === 'pending' && (
-              <Text style={tw`text-base text-gray-600 mt-1`}>
-                Under review by admin.
-              </Text>
-            )}
-            {userCourt.status === 'approved' && (
-              <Text style={tw`text-base text-gray-600 mt-1`}>
-                Your court is live!
-              </Text>
-            )}
+            <Text style={tw`text-lg font-semibold text-gray-700`}>
+              Status: {statusText}
+            </Text>
           </View>
 
-          <Text style={tw`text-2xl font-semibold text-gray-700`}>{userCourt.courtName}</Text>
-          <Text style={tw`text-lg text-gray-600 mt-2`}>{userCourt.address}</Text>
-          <Text style={tw`text-lg font-semibold text-gray-600 mt-2 p-2 bg-gray-200 rounded-lg`}>
-            Operating Hours: 24/7 (All slots)
-          </Text>
+          <Text style={tw`text-2xl font-semibold text-gray-700`}>
+            {userCourt.courtName}
+          </Text>
+          <Text style={tw`text-lg text-gray-600 mt-2`}>
+            {userCourt.address}
+          </Text>
+
+          <Text
+            style={tw`text-lg font-semibold text-gray-600 mt-2 p-2 bg-gray-200 rounded-lg`}
+          >
+            Operating Hours: 24/7 (All Slots)
+          </Text>
 
           <Text style={tw`text-xl font-bold text-green-700 mt-4`}>
             Rs. {userCourt.pricePerHour}
-            <Text style={tw`text-base font-normal text-gray-500`}> / hour</Text>
+            <Text style={tw`text-base font-normal text-gray-500`}>
+              {' '}
+              / hour
+            </Text>
           </Text>
-          
+
           <Pressable
             style={tw`bg-blue-600 py-3 rounded-lg shadow-md mt-6`}
-            onPress={handleEditCourt} 
+            onPress={handleEditCourt}
           >
             <Text style={tw`text-white text-center text-lg font-bold`}>
               Edit Court Details
+            </Text>
+          </Pressable>
+
+          {/* --- NEW BUTTON: Manage Slots --- */}
+          <Pressable
+            style={tw`bg-gray-700 py-3 rounded-lg shadow-md mt-4 flex-row items-center justify-center`}
+            onPress={handleManageSlots}
+          >
+            <Ionicons
+              name="cog-outline"
+              size={18}
+              color="white"
+              style={tw`mr-2`}
+            />
+            <Text style={tw`text-white text-center text-lg font-bold`}>
+              Manage Slot Availability
             </Text>
           </Pressable>
         </ScrollView>
@@ -131,13 +163,12 @@ export default function MyCourtScreen() {
     );
   }
 
-  // --- UI 3: Court Mojood Nahi Hai (Register Form Component) ---
+  // --- UI 3: No court registered (show form) ---
   return (
     <SafeAreaView style={tw`flex-1 bg-gray-100`}>
-      {/* Naya component yahan call ho raha hai */}
-      <CourtRegistrationForm 
-        user={user} 
-        onRegistrationSuccess={handleRegistrationSuccess} 
+      <CourtRegistrationForm
+        user={user}
+        onRegistrationSuccess={handleRegistrationSuccess}
       />
     </SafeAreaView>
   );

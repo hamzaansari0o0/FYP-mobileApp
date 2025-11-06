@@ -1,4 +1,3 @@
-//////////////////////////////////////////////////////////////////
 import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable, ActivityIndicator, Alert, FlatList } from 'react-native';
 import tw from 'twrnc';
@@ -14,29 +13,23 @@ const getTodayString = () => {
   return moment().format('YYYY-MM-DD');
 };
 
-// --- YEH FUNCTION UPDATE HUA HAI ---
-// Ab yeh 'dateStr' (selected date) ko parameter ke tor par le raha hai
+// Helper function: 24-hour slots generate karna
 const generateTimeSlots = (existingSlotsMap = {}, dateStr) => {
   const slotsArray = [];
   
-  // FIX: Ab yeh 'moment()' (aaj) ke bajaye 'moment(dateStr)' (selected date) se shuru hoga
   let currentMoment = moment(dateStr, 'YYYY-MM-DD').hour(0).minute(0).seconds(0).milliseconds(0);
-  
-  // Agle din ki 12:00 AM tak
   let endMoment = currentMoment.clone().add(1, 'days');
   
   while (currentMoment.isBefore(endMoment)) {
     const hourKey = currentMoment.format('HH'); 
     const status = existingSlotsMap[hourKey] || 'available';
-    
-    // Ab yeh slotDateTime object bilkul sahih date (e.g., 6 Nov) ka banega
     const slotDateTime = currentMoment.clone(); 
     
     slotsArray.push({
       hour: hourKey,
       timeDisplay: currentMoment.format('h:00 A'), 
       status: status,
-      slotDateTime: slotDateTime, // Yeh object ab [courtId].jsx ko pass hoga
+      slotDateTime: slotDateTime, 
     });
     
     currentMoment.add(1, 'hours');
@@ -61,7 +54,6 @@ export default function SlotPicker({
     fetchSlots(selectedDate);
   }, [selectedDate, courtId, user, refreshKey]); 
 
-  // --- YEH FUNCTION BHI UPDATE HUA HAI ---
   const fetchSlots = async (dateStr) => {
     if (!user) {
         setSlots([]); 
@@ -72,7 +64,7 @@ export default function SlotPicker({
     setLoadingSlots(true);
     setSlots([]);
     try {
-      const docId = `${courtId}_${dateStr}`; // e.g., ..._2025-11-06
+      const docId = `${courtId}_${dateStr}`; 
       const slotDocRef = doc(db, 'court_slots', docId);
       const docSnap = await getDoc(slotDocRef);
       let daySlotsMap = {};
@@ -80,7 +72,6 @@ export default function SlotPicker({
         daySlotsMap = docSnap.data().slots;
       }
       
-      // FIX: Ab hum 'dateStr' (selected date) ko generateTimeSlots mein pass kar rahe hain
       const slotsArray = generateTimeSlots(daySlotsMap, dateStr); 
       setSlots(slotsArray);
       
@@ -92,55 +83,79 @@ export default function SlotPicker({
     }
   };
 
-  // --- Render Slot Function (UPDATE HUA) ---
+  // --- RENDER SLOT FUNCTION (UPDATED) ---
   const renderSlot = ({ item }) => {
     const currentUserId = user?.uid; 
+    
+    // 1. Tamam possible states ko define karein
     const isAvailable = item.status === 'available';
     const isBookedByMe = currentUserId ? item.status === currentUserId : false; 
+    const isUnavailable = item.status === 'unavailable'; // <-- NAYI STATE
     
-    // --- REAL-TIME PAST SLOT CHECK ---
+    // 2. Past slot check karein
     const isToday = selectedDate === getTodayString();
-    
-    // FIX: Ab 'item.slotDateTime' (jo generateTimeSlots se aa raha hai) 
-    // hamesha sahih date (e.g., 6 Nov) ka hoga.
     const slotTime = item.slotDateTime; 
-    
     const isPastSlot = isToday && slotTime.isBefore(moment()); 
 
+    // 3. Icons
     const hourInt = parseInt(item.hour);
     const isDay = hourInt >= 6 && hourInt < 18;
     const iconName = isDay ? 'sunny-outline' : 'moon-outline';
     const iconColor = isDay ? tw.color('orange-500') : tw.color('purple-500');
     
-    const isDisabled = !currentUserId || !isAvailable || isPastSlot;
+    // 4. Disable logic update karein
+    // Slot disable hoga agar: User login nahi, Slot available nahi, Waqt guzar gaya, YA Slot unavailable hai
+    const isDisabled = !currentUserId || !isAvailable || isPastSlot || isUnavailable; 
+
+    // --- 5. Style aur Text logic (Priority ke sath) ---
+    let slotStyle = tw`py-3 px-2 w-[30%] items-center rounded-lg border m-1`;
+    let timeColor = tw`text-gray-800`;
+    let statusText = 'Booked'; // Default (agar booked by others hai)
+    let statusColor = tw`text-gray-500`;
+
+    if (isPastSlot) {
+      slotStyle = tw.style(slotStyle, `opacity-50 bg-gray-200 border-gray-300`);
+      timeColor = tw`text-gray-500`;
+      statusText = 'Expired';
+      statusColor = tw`text-red-600`;
+    } else if (isUnavailable) { // <-- NAYA LOGIC
+      slotStyle = tw.style(slotStyle, `bg-red-100 border-red-300`); // Red style
+      timeColor = tw`text-red-700`; // Red time
+      statusText = 'Unavailable'; // Red text
+      statusColor = tw`text-red-700`;
+    } else if (isBookedByMe) {
+      slotStyle = tw.style(slotStyle, `bg-blue-100 border-blue-300`);
+      timeColor = tw`text-blue-800`;
+      statusText = 'You Booked';
+      statusColor = tw`text-blue-600`;
+    } else if (isAvailable) {
+      slotStyle = tw.style(slotStyle, `bg-green-100 border-green-300`);
+      timeColor = tw`text-green-800`;
+      statusText = 'Available';
+      statusColor = tw`text-green-600`;
+    } else {
+      // Booked by others
+      slotStyle = tw.style(slotStyle, `bg-gray-200 border-gray-300`);
+      timeColor = tw`text-gray-500`;
+    }
+    // ---------------------------------------------------
 
     return (
       <Pressable
-        style={tw.style(
-          `py-3 px-2 w-[30%] items-center rounded-lg border m-1`,
-          isAvailable && !isPastSlot ? `bg-green-100 border-green-300` : `bg-gray-200 border-gray-300`,
-          isBookedByMe && !isPastSlot && `bg-blue-100 border-blue-300`,
-          isPastSlot && `opacity-50`
-        )}
-        // Ab yeh 'item' (jis mein sahih 6 Nov ki date hai) ko parent ko bheje ga
-        onPress={() => onSlotSelect(item)} 
+        style={slotStyle}
+        // Sirf 'available' slots par hi 'onSlotSelect' call hoga
+        onPress={() => isAvailable && !isPastSlot && onSlotSelect(item)} 
         disabled={isDisabled} 
       >
         <View style={tw`flex-row items-center mb-1`}>
             <Ionicons name={iconName} size={14} color={iconColor} style={tw`mr-1`} />
-            <Text style={tw.style(
-                `font-bold text-sm`,
-                isDisabled ? `text-gray-500` : (isBookedByMe ? `text-blue-800` : `text-gray-800`)
-            )}>
+            <Text style={tw.style(`font-bold text-sm`, timeColor)}>
                 {item.timeDisplay}
             </Text>
         </View>
         
-        <Text style={tw.style(
-          `text-xs`,
-          isPastSlot ? `text-red-600` : (isAvailable ? `text-green-600` : (isBookedByMe ? `text-blue-600` : `text-gray-500`))
-        )}>
-          {isPastSlot ? 'Expired' : (isAvailable ? 'Available' : (isBookedByMe ? 'You Booked' : 'Booked'))}
+        <Text style={tw.style(`text-xs`, statusColor)}>
+          {statusText}
         </Text>
       </Pressable>
     );

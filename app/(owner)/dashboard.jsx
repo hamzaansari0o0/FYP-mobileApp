@@ -3,14 +3,24 @@ import { View, Text, FlatList, ActivityIndicator, Alert, Pressable } from 'react
 import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
 import { db } from '../../firebase/firebaseConfig';
-import { collection, query, where, getDocs, orderBy, doc, runTransaction, Timestamp } from 'firebase/firestore'; // Imports update karein
+import { 
+  collection, 
+  query, 
+  where, 
+  getDocs, 
+  orderBy, 
+  doc, 
+  runTransaction, 
+  Timestamp,
+  increment // <-- Refund ke liye
+} from 'firebase/firestore'; 
 import { useAuth } from '../../context/AuthContext';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import moment from 'moment'; 
 
-// --- Owner ki booking card (UPDATE HUA HAI) ---
-const OwnerBookingCard = ({ booking, onCancel }) => {
+// --- Owner ki booking card (UPDATED) ---
+const OwnerBookingCard = ({ booking, onCancel, isCancelling }) => {
   const formattedTime = moment(booking.slotTime, 'HH').format('h:00 A');
   const bookingStatus = booking.status || 'upcoming';
 
@@ -31,25 +41,45 @@ const OwnerBookingCard = ({ booking, onCancel }) => {
       
       <View style={tw`flex-row justify-between items-center mt-3 pt-2 border-t border-gray-100`}>
         <Text style={tw`text-lg font-bold text-green-700`}>
-          Rs. {booking.pricePaid}
+          Paid: Rs. {booking.amountPaid}
         </Text>
-        {/* Status dikhayein */}
-        <Text style={tw.style(
-          `text-sm font-semibold px-2 py-1 rounded-full`,
-          bookingStatus.startsWith('cancelled') ? 'bg-red-100 text-red-600' : 'bg-yellow-100 text-yellow-600'
-        )}>
-          {bookingStatus.toUpperCase()}
+        <Text
+          style={tw.style(
+            `text-sm font-semibold px-2 py-1 rounded-full`,
+            bookingStatus.startsWith('cancelled')
+              ? 'bg-red-100 text-red-600'
+              : 'bg-green-100 text-green-600'
+          )}
+        >
+          {bookingStatus === 'upcoming' ? 'CONFIRMED' : bookingStatus.toUpperCase()}
         </Text>
       </View>
 
-      {/* Owner ke liye "Cancel" button (ye 3-ghante ka rule follow nahi karta) */}
+      {/* Cancel Button (Owner) */}
       {bookingStatus === 'upcoming' && (
-        <Pressable 
-          style={tw`bg-yellow-500 py-2 rounded-lg mt-3`}
+        <Pressable
+          style={tw.style(
+            `bg-red-500 py-2 rounded-lg mt-3`,
+            isCancelling && `bg-red-300`
+          )}
           onPress={() => onCancel(booking)}
+          disabled={isCancelling}
         >
-          <Text style={tw`text-white text-center font-bold`}>Cancel Booking (Owner)</Text>
+          {isCancelling ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={tw`text-white text-center font-bold`}>
+              Cancel Booking (Owner)
+            </Text>
+          )}
         </Pressable>
+      )}
+
+      {/* Owner cancelled message */}
+      {bookingStatus === 'cancelled_by_owner' && (
+        <Text style={tw`text-center text-sm text-red-500 mt-2`}>
+          You cancelled this booking. Player was refunded.
+        </Text>
       )}
     </View>
   );
@@ -59,6 +89,7 @@ export default function OwnerDashboard() {
   const { user } = useAuth();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [cancellingId, setCancellingId] = useState(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -68,31 +99,28 @@ export default function OwnerDashboard() {
     }, [user])
   );
 
-  // --- Fetch Logic (UPDATE HUA HAI) ---
   const fetchOwnerBookings = async () => {
     setLoading(true);
-    setBookings([]); 
+    setBookings([]);
 
     try {
-      // Nayi Query: Sirf woh bookings jinka END TIME abhi se bara hai
       const q = query(
         collection(db, 'bookings'),
-        where('ownerId', '==', user.uid),               
-        where('slotEndDateTime', '>', Timestamp.now()), 
-        orderBy('slotEndDateTime', 'asc')                 
+        where('ownerId', '==', user.uid),
+        where('slotEndDateTime', '>', Timestamp.now()),
+        orderBy('slotEndDateTime', 'asc')
       );
-      
+
       const querySnapshot = await getDocs(q);
-      const bookingsList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const bookingsList = querySnapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter(booking => booking.status !== 'completed_and_paid');
+
       setBookings(bookingsList);
-      
     } catch (error) {
-      console.error("Error fetching owner bookings: ", error.message);
+      console.error('Error fetching owner bookings:', error.message);
       if (error.code === 'failed-precondition') {
-        Alert.alert(
-          'Index Required', 
-          'Bookings fetch karne ke liye ek naye index ki zaroorat hai. Please terminal mein diye gaye link ko follow karein.'
-        );
+        Alert.alert('Index Required', 'Please check console for index link.');
       } else {
         Alert.alert('Error', 'Could not fetch your bookings.');
       }
@@ -101,66 +129,97 @@ export default function OwnerDashboard() {
     }
   };
 
-  // --- Owner ka Cancellation Logic ---
+  // --- Owner Cancellation Logic ---
   const handleOwnerCancel = (booking) => {
     Alert.alert(
-      "Owner Cancellation",
-      "Aap is booking ko cancel karna chahte hain? (Player ko notification chala jayega)",
+      'Owner Cancellation (Maintenance)',
+      `Are you sure? This will cancel the booking, block this slot as "unavailable", AND issue a FULL REFUND of Rs. ${booking.amountPaid} to the player's wallet.`,
       [
-        { text: "Go Back", style: "cancel" },
-        { 
-          text: "Confirm Cancel", 
-          style: "destructive",
-          onPress: () => performOwnerCancellation(booking) 
+        { text: 'Go Back', style: 'cancel' },
+        {
+          text: 'Confirm Cancel & Refund',
+          style: 'destructive',
+          onPress: () => performOwnerCancellation(booking),
         },
       ]
     );
   };
 
+  // --- Transaction Logic ---
   const performOwnerCancellation = async (booking) => {
+    setCancellingId(booking.id);
+
     const bookingRef = doc(db, 'bookings', booking.id);
     const slotRef = doc(db, 'court_slots', `${booking.courtId}_${booking.date}`);
+    const playerUserRef = doc(db, 'users', booking.playerId);
+    const refundAmount = booking.amountPaid;
 
     try {
       await runTransaction(db, async (transaction) => {
+        // Step 1: Slot ko 'unavailable' karein
         const slotDoc = await transaction.get(slotRef);
         if (slotDoc.exists()) {
-           const slotsMap = slotDoc.data().slots;
-           slotsMap[booking.slotTime] = 'available'; // Slot free karein
-           transaction.update(slotRef, { slots: slotsMap });
+          const slotsMap = slotDoc.data().slots;
+          slotsMap[booking.slotTime] = 'unavailable';
+          transaction.update(slotRef, { slots: slotsMap });
         }
-        
+
+        // Step 2: Booking status update
         transaction.update(bookingRef, {
-          status: 'cancelled_by_owner' // Naya status
+          status: 'cancelled_by_owner',
+          cancellationReason: 'Maintenance',
+        });
+
+        // Step 3: Player refund
+        transaction.update(playerUserRef, {
+          walletCredit: increment(refundAmount),
         });
       });
-      Alert.alert('Success', 'Booking has been cancelled.');
-      fetchOwnerBookings(); // List refresh karein
+
+      Alert.alert(
+        'Success',
+        'Booking cancelled. The slot is now blocked and the player has been refunded.'
+      );
+      fetchOwnerBookings();
     } catch (error) {
+      console.error('Owner cancellation failed:', error);
       Alert.alert('Error', 'Failed to cancel booking.');
+    } finally {
+      setCancellingId(null);
     }
   };
 
   return (
     <SafeAreaView style={tw`flex-1 bg-gray-100`}>
       <View style={tw`p-5`}>
-        <Text style={tw`text-3xl font-bold text-green-800 mb-5`}>Upcoming Bookings</Text>
-        
+        <Text style={tw`text-3xl font-bold text-green-800 mb-5`}>
+          Upcoming Bookings
+        </Text>
+
         {loading ? (
-          <ActivityIndicator size="large" color={tw.color('green-600')} style={tw`mt-20`} />
+          <ActivityIndicator
+            size="large"
+            color={tw.color('green-600')}
+            style={tw`mt-20`}
+          />
         ) : (
           <FlatList
             data={bookings}
-            keyExtractor={item => item.id}
+            keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
-              <OwnerBookingCard 
-                booking={item} 
+              <OwnerBookingCard
+                booking={item}
                 onCancel={handleOwnerCancel}
+                isCancelling={cancellingId === item.id}
               />
             )}
             ListEmptyComponent={
               <View style={tw`items-center justify-center mt-20`}>
-                <Ionicons name="sad-outline" size={40} color={tw.color('gray-400')} />
+                <Ionicons
+                  name="sad-outline"
+                  size={40}
+                  color={tw.color('gray-400')}
+                />
                 <Text style={tw`text-lg text-gray-500 mt-2`}>
                   You have no upcoming bookings.
                 </Text>
