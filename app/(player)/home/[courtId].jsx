@@ -76,19 +76,15 @@ export default function CourtDetailScreen() {
     setIsPaymentModalVisible(true);
   };
 
-  // --- CONFIRM PAYMENT (Full Payment) ---
-  const handleConfirmPayment = async () => {
+  // --- CONFIRM PAYMENT (Full Payment + Refund Account) ---
+
+  // {/* === 1. MODIFIED: Added 'refundAccount' parameter === */}
+  const handleConfirmPayment = async (refundAccount) => {
     if (!user || !selectedSlot || !court) {
       throw new Error("User or slot data is missing.");
     }
 
-    const {
-      hour,
-      date,
-      slotDateTime,
-      totalPrice,
-      amountPaid,
-    } = selectedSlot;
+    const { hour, date, slotDateTime, totalPrice, amountPaid } = selectedSlot;
 
     // Ensure valid timestamps
     let slotStartDateTime;
@@ -97,8 +93,8 @@ export default function CourtDetailScreen() {
     } else {
       slotStartDateTime = moment(slotDateTime).toDate();
     }
-    const slotEndDateTime = moment(slotStartDateTime).add(1, "hour").toDate();
 
+    const slotEndDateTime = moment(slotStartDateTime).add(1, "hour").toDate();
     const slotDocId = `${courtId}_${date}`;
     const slotRef = doc(db, "court_slots", slotDocId);
     const bookingCollectionRef = collection(db, "bookings");
@@ -128,7 +124,7 @@ export default function CourtDetailScreen() {
           { merge: true }
         );
 
-        // --- NEW BOOKING DOCUMENT (Full Payment) ---
+        // --- NEW BOOKING DOCUMENT (Full Payment + Refund Account) ---
         const newBookingData = {
           playerId: user.uid,
           playerName: userData?.name || "Player",
@@ -142,10 +138,13 @@ export default function CourtDetailScreen() {
           slotTime: hour,
 
           status: "upcoming",
-          paymentStatus: "paid_full", // ✅ Full payment
+          paymentStatus: "paid_full",
           totalPrice: totalPrice,
           amountPaid: amountPaid,
           pendingBalance: 0,
+
+          // {/* === 2. This 'refundAccount' variable now comes from the function parameter === */}
+          playerRefundAccount: refundAccount, // ✅ Player's JazzCash / Easypaisa number
 
           createdAt: serverTimestamp(),
         };
@@ -158,7 +157,7 @@ export default function CourtDetailScreen() {
       setRefreshKey((prev) => prev + 1);
     } catch (error) {
       console.error("Booking Transaction Error: ", error);
-      throw error;
+      Alert.alert("Error", "Something went wrong during booking. Try again.");
     }
   };
 

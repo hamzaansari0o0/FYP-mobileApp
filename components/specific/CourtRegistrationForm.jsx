@@ -1,69 +1,102 @@
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  Pressable,
-  Alert,
-  ActivityIndicator,
-  ScrollView,
+  View, Text, TextInput, Pressable, Alert,
+  ActivityIndicator, ScrollView, Image
 } from 'react-native';
 import tw from 'twrnc';
-import { db } from '../../firebase/firebaseConfig'; // Path theek karein
+import { db, storage } from '../../firebase/firebaseConfig';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import DateTimePickerModal from 'react-native-modal-datetime-picker';
+import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import * as ImagePicker from 'expo-image-picker';
 
-// Helper function: Date object se "HH:mm" string banata hai
-const formatTime = (date) => {
-  if (!date) return '00:00';
-  const hours = date.getHours().toString().padStart(2, '0');
-  const minutes = date.getMinutes().toString().padStart(2, '0');
-  return `${hours}:${minutes}`;
-};
-
-// Ye component props mein 'user' object aur ek 'onSuccess' function lega
 export default function CourtRegistrationForm({ user, onRegistrationSuccess }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
-  // Form ki tamam state ab is component ke andar hai
   const [formData, setFormData] = useState({
     courtName: '',
-    address: '',
+    address: '', // Default: Arena Address (Agar same hai)
     pricePerHour: '',
     bankName: '',
     accountNumber: '',
     jazzCash: '',
   });
-
-  // Time state bhi isi component ke andar hai
-  const [openTime, setOpenTime] = useState(new Date(0, 0, 0, 17, 0)); // Default 5 PM (ab 24/7 hai)
-  const [closeTime, setCloseTime] = useState(new Date(0, 0, 0, 4, 0)); // Default 4 AM (ab 24/7 hai)
-  const [isTimePickerVisible, setTimePickerVisible] = useState(false);
-  const [pickerType, setPickerType] = useState('open');
-
-  // Time Picker Handlers
-  const handleConfirmTime = (date) => {
-    const cleanDate = new Date(date);
-    cleanDate.setMinutes(0);
-    cleanDate.setSeconds(0);
-    if (pickerType === 'open') setOpenTime(cleanDate);
-    else setCloseTime(cleanDate);
-    setTimePickerVisible(false);
-  };
   
-  const handleShowPicker = (type) => {
-    setPickerType(type);
-    setTimePickerVisible(true);
-  };
+  const [image, setImage] = useState(null);
 
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  // Register logic bhi isi component mein move ho gaya
+  // --- Image Picker ---
+  const pickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Denied', 'Need camera roll permissions.');
+      return;
+    }
+
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'], // Updated
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.7,
+    });
+
+    if (!result.canceled) {
+      const asset = result.assets[0];
+      if (asset.fileSize && asset.fileSize > 5 * 1024 * 1024) {
+        Alert.alert('Image Too Large', 'Please select an image smaller than 5MB.');
+        return;
+      }
+      setImage(asset.uri);
+    }
+  };
+  
+  // --- Upload Logic (Reliable XHR) ---
+  const uploadImageAsync = async (uri) => {
+    const blob = await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.onload = function () { resolve(xhr.response); };
+      xhr.onerror = function () { reject(new TypeError("Network request failed")); };
+      xhr.responseType = "blob";
+      xhr.open("GET", uri, true);
+      xhr.send(null);
+    });
+    
+    // courts/USER_ID/court_TIMESTAMP
+    const fileRef = ref(storage, `courts/${user.uid}/court_${Date.now()}`);
+    
+    return new Promise((resolve, reject) => {
+      const uploadTask = uploadBytesResumable(fileRef, blob);
+
+      uploadTask.on('state_changed', 
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          setUploadProgress(Math.round(progress));
+        }, 
+        (error) => {
+          blob.close();
+          reject(error);
+        }, 
+        async () => {
+          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+          blob.close();
+          resolve(downloadURL);
+        }
+      );
+    });
+  };
+
   const handleRegisterCourt = async () => {
-    if (!formData.courtName || !formData.address || !formData.pricePerHour || !formData.bankName || !formData.accountNumber) {
+    // 1. Validation
+    if (!formData.courtName || !formData.pricePerHour || !formData.bankName || !formData.accountNumber) {
       Alert.alert('Missing Fields', 'Please fill all required fields.');
+      return;
+    }
+    
+    if (!image) {
+      Alert.alert('Missing Image', 'Please upload a court picture.');
       return;
     }
     
@@ -74,68 +107,92 @@ export default function CourtRegistrationForm({ user, onRegistrationSuccess }) {
     }
 
     setIsSubmitting(true);
+    setUploadProgress(0);
+
     try {
+      // Step 1: Upload Image
+      const courtImageURL = await uploadImageAsync(image);
+
+      setUploadProgress(100); 
+      
+      // Step 2: Save to Firestore
       const newCourtData = {
         ownerId: user.uid,
         courtName: formData.courtName.trim(),
-        address: formData.address.trim(),
+        address: formData.address.trim() || "Same as Arena", // Optional if inside arena
         pricePerHour: price,
         
-        // 24/7 Booking ke liye hardcoded values
+        // Defaults (Baad mein update ho sakte hain)
         openTime: "00:00",
-        closeTime: "23:00", // 11 PM slot (23:00 - 23:59)
+        closeTime: "23:00",
         
-        status: 'pending', 
+        courtImageURL: courtImageURL,
+        status: 'pending', // IMPORTANT: Pending for Approval
+        
         ownerBankDetails: {
           bankName: formData.bankName.trim(),
           accountNumber: formData.accountNumber.trim(),
           jazzCash: formData.jazzCash.trim() || '',
         },
-        documentImages: [],
+        documentImages: [], // Abhi court ke liye alag docs nahi maang rahe
         location: null,
         createdAt: serverTimestamp(),
       };
 
       const docRef = await addDoc(collection(db, 'courts'), newCourtData);
       
-      Alert.alert('Success!', 'Your court has been submitted for approval.');
+      Alert.alert('Success!', 'Court submitted for Admin Approval.');
       
-      // Parent component (MyCourtScreen) ko batayein ke registration ho gayi hai
       if (onRegistrationSuccess) {
         onRegistrationSuccess(docRef.id, newCourtData);
       }
 
     } catch (error) {
       console.error('Error registering court: ', error);
-      Alert.alert('Error', 'Court registration failed. Please try again.');
+      Alert.alert('Error', 'Registration failed. Please try again.');
     } finally {
       setIsSubmitting(false);
+      setUploadProgress(0);
     }
   };
+  
+  const getButtonText = () => {
+    if (isSubmitting) {
+      if (uploadProgress > 0 && uploadProgress < 100) {
+        return `Uploading... ${uploadProgress}%`;
+      }
+      return 'Submitting...';
+    }
+    return 'Submit Court for Approval';
+  };
 
-  // Return mein sirf Form ka UI hai
   return (
-    <ScrollView contentContainerStyle={tw`p-6`}>
-      <Text style={tw`text-3xl font-bold text-gray-800 mb-6`}>Register Your Court</Text>
+    <ScrollView contentContainerStyle={tw`p-6 pb-20`}>
+      <Text style={tw`text-3xl font-bold text-gray-800 mb-2`}>Add New Court</Text>
+      <Text style={tw`text-sm text-gray-500 mb-6`}>
+        Add details for a specific court (e.g. "Futsal Court 1"). This will need admin approval.
+      </Text>
       
-      {/* Court Details */}
-      <Text style={tw`text-lg font-semibold mb-3 text-gray-700`}>Court Name</Text>
+      {/* Court Name */}
+      <Text style={tw`text-lg font-semibold mb-2 text-gray-700`}>Court Name</Text>
       <TextInput
         style={tw`border border-gray-300 p-4 rounded-lg mb-4 text-base bg-white`}
-        placeholder="e.g., Hamza Futsal Arena"
+        placeholder="e.g., Futsal Ground A"
         value={formData.courtName}
         onChangeText={(val) => handleInputChange('courtName', val)}
       />
       
-      <Text style={tw`text-lg font-semibold mb-3 text-gray-700`}>Full Address</Text>
+      {/* Address (Optional if same as Arena) */}
+      <Text style={tw`text-lg font-semibold mb-2 text-gray-700`}>Address (Optional)</Text>
       <TextInput
         style={tw`border border-gray-300 p-4 rounded-lg mb-4 text-base bg-white`}
-        placeholder="e.g., 123-B, Johar Town, Lahore"
+        placeholder="Leave empty if same as Arena"
         value={formData.address}
         onChangeText={(val) => handleInputChange('address', val)}
       />
       
-      <Text style={tw`text-lg font-semibold mb-3 text-gray-700`}>Price (per hour)</Text>
+      {/* Price */}
+      <Text style={tw`text-lg font-semibold mb-2 text-gray-700`}>Price (per hour)</Text>
       <TextInput
         style={tw`border border-gray-300 p-4 rounded-lg mb-4 text-base bg-white`}
         placeholder="e.g., 2000"
@@ -144,17 +201,34 @@ export default function CourtRegistrationForm({ user, onRegistrationSuccess }) {
         keyboardType="numeric"
       />
 
-      {/* Operating Hours Section (Removed) */}
-      <View style={tw`bg-blue-100 p-3 rounded-lg my-4`}>
-         <Text style={tw`text-sm font-semibold text-blue-700 text-center`}>
-            Note: Your court will be available for 24/7 booking (12:00 AM - 11:00 PM).
-         </Text>
+      {/* Image Picker */}
+      <Text style={tw`text-lg font-semibold mb-2 text-gray-700`}>Court Picture</Text>
+      {image ? (
+        <View style={tw`mb-4`}>
+          <Image source={{ uri: image }} style={tw`w-full h-48 rounded-lg mb-2`} resizeMode="cover" />
+          <Pressable onPress={pickImage}>
+            <Text style={tw`text-blue-600 text-center font-bold`}>Change Image</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <Pressable
+          style={tw`border-2 border-dashed border-gray-300 bg-gray-50 p-6 rounded-lg mb-6 items-center`}
+          onPress={pickImage}
+          disabled={isSubmitting}
+        >
+          <Text style={tw`text-gray-500 font-semibold`}>+ Upload Court Photo</Text>
+        </Pressable>
+      )}
+
+      {/* Bank Details Header */}
+      <View style={tw`bg-blue-50 p-4 rounded-lg mb-4 border border-blue-100`}>
+        <Text style={tw`text-lg font-bold text-blue-800 mb-2`}>Bank Details for Payouts</Text>
+        <Text style={tw`text-xs text-blue-600`}>
+           This account will receive payments for bookings of this court.
+        </Text>
       </View>
       
-      {/* Bank Details */}
-      <Text style={tw`text-2xl font-bold text-gray-800 mt-6 mb-4`}>Bank Details</Text>
-      
-      <Text style={tw`text-lg font-semibold mb-3 text-gray-700`}>Bank Name</Text>
+      <Text style={tw`text-lg font-semibold mb-2 text-gray-700`}>Bank Name</Text>
       <TextInput
         style={tw`border border-gray-300 p-4 rounded-lg mb-4 text-base bg-white`}
         placeholder="e.g., Meezan Bank"
@@ -162,7 +236,7 @@ export default function CourtRegistrationForm({ user, onRegistrationSuccess }) {
         onChangeText={(val) => handleInputChange('bankName', val)}
       />
       
-      <Text style={tw`text-lg font-semibold mb-3 text-gray-700`}>Account Number (IBAN)</Text>
+      <Text style={tw`text-lg font-semibold mb-2 text-gray-700`}>Account Number (IBAN)</Text>
       <TextInput
         style={tw`border border-gray-300 p-4 rounded-lg mb-4 text-base bg-white`}
         placeholder="PK..."
@@ -170,9 +244,9 @@ export default function CourtRegistrationForm({ user, onRegistrationSuccess }) {
         onChangeText={(val) => handleInputChange('accountNumber', val)}
       />
       
-      <Text style={tw`text-lg font-semibold mb-3 text-gray-700`}>JazzCash / EasyPaisa (Optional)</Text>
+      <Text style={tw`text-lg font-semibold mb-2 text-gray-700`}>JazzCash / EasyPaisa (Optional)</Text>
       <TextInput
-        style={tw`border border-gray-300 p-4 rounded-lg mb-6 text-base bg-white`}
+        style={tw`border border-gray-300 p-4 rounded-lg mb-8 text-base bg-white`}
         placeholder="0300-1234567"
         value={formData.jazzCash}
         onChangeText={(val) => handleInputChange('jazzCash', val)}
@@ -182,7 +256,7 @@ export default function CourtRegistrationForm({ user, onRegistrationSuccess }) {
       {/* Submit Button */}
       <Pressable
         style={tw.style(
-          `bg-green-600 py-4 rounded-lg shadow-md`,
+          `bg-green-600 py-4 rounded-lg shadow-md mb-10`,
           isSubmitting && `bg-green-400`
         )}
         onPress={handleRegisterCourt}
@@ -192,14 +266,10 @@ export default function CourtRegistrationForm({ user, onRegistrationSuccess }) {
           <ActivityIndicator color={tw.color('white')} />
         ) : (
           <Text style={tw`text-white text-center text-lg font-bold`}>
-            Submit for Approval
+            {getButtonText()}
           </Text>
         )}
       </Pressable>
-      
-      {/* Time Picker Modal ki zaroorat nahi, kyunke hum ne time fields remove kar diye hain */}
-      {/* Lekin agar aap ne rakhe hain, to unhein bhi yahan move karein */}
-      
     </ScrollView>
   );
 }

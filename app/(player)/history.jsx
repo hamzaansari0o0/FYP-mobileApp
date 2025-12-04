@@ -19,7 +19,7 @@ import {
   doc,
   runTransaction,
   Timestamp,
-  increment,
+  // increment, // {/* === 1. REMOVED 'increment' (no longer needed) === */}
 } from "firebase/firestore";
 import { useAuth } from "../../context/AuthContext";
 import { useFocusEffect } from "expo-router";
@@ -34,6 +34,11 @@ const BookingCard = ({ booking, onCancel, isCancelling }) => {
 
   const hoursRemaining = bookingStartTime.diff(now, "hours");
   const canCancel = hoursRemaining > 3 && booking.status === "upcoming";
+
+  // {/* === 2. HELPER TO SAFELY MASK ACCOUNT NUMBER === */}
+  const refundAccountDisplay = booking.playerRefundAccount
+    ? `...${booking.playerRefundAccount.slice(-4)}` // Shows last 4 digits
+    : "[No Account Saved]";
 
   return (
     <View style={tw`bg-white p-4 rounded-lg shadow-md mb-4`}>
@@ -87,9 +92,10 @@ const BookingCard = ({ booking, onCancel, isCancelling }) => {
           <Text style={tw`text-lg font-bold text-red-600`}>
             Booking Cancelled
           </Text>
+          {/* === 3. UPDATED TEXT (No more wallet) === */}
           {booking.status === "cancelled_by_player" && (
             <Text style={tw`text-sm text-gray-600`}>
-              (Full refund of Rs. {booking.amountPaid} added to wallet)
+              (Refund simulated to {refundAccountDisplay})
             </Text>
           )}
           {booking.status === "cancelled_by_owner" && (
@@ -158,9 +164,14 @@ export default function HistoryScreen() {
 
   /* 🔹 Cancel Booking Confirmation */
   const handleCancelBooking = (booking) => {
+    // {/* === 4. UPDATED CONFIRMATION ALERT (No more wallet) === */}
+    const refundAccountDisplay = booking.playerRefundAccount
+      ? `...${booking.playerRefundAccount.slice(-4)}`
+      : "[No Account Found]";
+      
     Alert.alert(
       "Confirm Cancellation",
-      `Are you sure you want to cancel? The full amount of Rs. ${booking.amountPaid} will be refunded to your app wallet.`,
+      `Are you sure you want to cancel? A (Simulated) refund of Rs. ${booking.amountPaid} will be sent to your JazzCash account (${refundAccountDisplay}).`,
       [
         { text: "No", style: "cancel" },
         {
@@ -178,9 +189,13 @@ export default function HistoryScreen() {
 
     const bookingRef = doc(db, "bookings", booking.id);
     const slotRef = doc(db, "court_slots", `${booking.courtId}_${booking.date}`);
-    const playerRef = doc(db, "users", booking.playerId);
+    // {/* === 5. REMOVED playerRef (No longer needed for wallet) === */}
+    // const playerRef = doc(db, "users", booking.playerId);
 
     const refundAmount = booking.amountPaid;
+    const refundAccountDisplay = booking.playerRefundAccount
+      ? `...${booking.playerRefundAccount.slice(-4)}`
+      : "[No Account Found]";
 
     try {
       await runTransaction(db, async (transaction) => {
@@ -195,15 +210,16 @@ export default function HistoryScreen() {
         // Step 2: Mark booking as cancelled
         transaction.update(bookingRef, { status: "cancelled_by_player" });
 
-        // Step 3: Refund full amount to user's wallet
-        transaction.update(playerRef, {
-          walletCredit: increment(refundAmount),
-        });
+        // {/* === 6. REMOVED Step 3 (No more wallet increment) === */}
+        // transaction.update(playerRef, {
+        //   walletCredit: increment(refundAmount),
+        // });
       });
 
+      // {/* === 7. UPDATED SUCCESS ALERT (No more wallet) === */}
       Alert.alert(
         "Success",
-        `Your booking has been cancelled. Rs. ${refundAmount} has been added to your in-app wallet.`
+        `Your booking has been cancelled. A (Simulated) refund of Rs. ${refundAmount} has been processed to your account (${refundAccountDisplay}).`
       );
 
       fetchMyBookings();

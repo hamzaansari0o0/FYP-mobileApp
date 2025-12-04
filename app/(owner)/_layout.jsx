@@ -14,8 +14,9 @@ export default function OwnerLayout() {
         tabBarLabelStyle: tw`text-xs font-medium mb-1`,
       }}
     >
+      {/* 1. Dashboard */}
       <Tabs.Screen
-        name="dashboard" // app/(owner)/dashboard.jsx
+        name="dashboard" 
         options={{
           title: 'Dashboard',
           tabBarIcon: ({ color, size, focused }) => (
@@ -24,18 +25,32 @@ export default function OwnerLayout() {
         }}
       />
       
+      {/* 2. My Court (Naam aur Icon theek kar diya) */}
       <Tabs.Screen
-        name="myCourt" // app/(owner)/myCourt/ folder
+        name="myCourt" // <-- Naam 'myCourt' kar diya (folder se match karne ke liye)
         options={{
-          title: 'My Court',
+          title: 'My Arena', // Title abhi bhi 'My Arena' rakha hai
           tabBarIcon: ({ color, size, focused }) => (
+            // Icon 'football' kar diya
             <Ionicons name={focused ? 'football' : 'football-outline'} size={size} color={color} />
           ),
         }}
       />
-      
+
+      {/* 3. Tournaments */}
       <Tabs.Screen
-        name="profile" // app/(owner)/profile.jsx
+        name="tournaments"
+        options={{
+          title: 'Tournaments',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? 'trophy' : 'trophy-outline'} size={size} color={color} />
+          ),
+        }}
+      />
+      
+      {/* 4. Profile (Aakhri tab) */}
+      <Tabs.Screen
+        name="profile"
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, size, focused }) => (

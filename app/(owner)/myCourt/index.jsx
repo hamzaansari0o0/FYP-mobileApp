@@ -1,85 +1,131 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, Pressable, Alert, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, Pressable, Alert, ActivityIndicator, FlatList, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
 import { useAuth } from '../../../context/AuthContext';
 import { db } from '../../../firebase/firebaseConfig';
-import { collection, query, where, getDocs, limit } from 'firebase/firestore';
-import { useRouter, useFocusEffect } from 'expo-router';
-import CourtRegistrationForm from '../../../components/specific/CourtRegistrationForm';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore'; // 'doc', 'getDoc' add kiya
+import { useRouter, useFocusEffect, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import ArenaRegistrationForm from '../../../components/specific/ArenaRegistrationForm'; 
+
+// --- Mini Court Card ---
+const OwnerCourtCard = ({ court, onEdit, onManageSlots }) => {
+  return (
+    <View style={tw`bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-4`}>
+      {court.courtImageURL && (
+        <Image
+          source={{ uri: court.courtImageURL }}
+          style={tw`w-full h-36 rounded-md mb-3`}
+          resizeMode="cover"
+        />
+      )}
+      <View style={tw`flex-row justify-between items-center mb-1`}>
+         <Text style={tw`text-lg font-bold text-gray-800`}>{court.courtName}</Text>
+         <View style={tw`px-2 py-1 rounded-full ${court.status === 'approved' ? 'bg-green-100' : 'bg-yellow-100'}`}>
+            <Text style={tw`text-xs font-bold ${court.status === 'approved' ? 'text-green-700' : 'text-yellow-700'}`}>
+                {court.status ? court.status.toUpperCase() : 'PENDING'}
+            </Text>
+         </View>
+      </View>
+      
+      <Text style={tw`text-base text-gray-600 mb-3`}>Rs. {court.pricePerHour} / hr</Text>
+      
+      <View style={tw`flex-row pt-3 border-t border-gray-100`}>
+        <Pressable 
+          onPress={() => onEdit(court.id)}
+          style={tw`flex-1 bg-blue-50 py-2 rounded-lg mr-2 border border-blue-100`}
+        >
+          <Text style={tw`text-blue-700 text-center font-semibold`}>Edit</Text>
+        </Pressable>
+        <Pressable 
+          onPress={() => onManageSlots(court.id)}
+          style={tw`flex-1 bg-gray-50 py-2 rounded-lg ml-2 border border-gray-200`}
+        >
+          <Text style={tw`text-gray-700 text-center font-semibold`}>Manage Slots</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+};
 
 export default function MyCourtScreen() {
-  const { user } = useAuth();
+  const { user, userData: initialUserData } = useAuth(); // Context data sirf initial load ke liye
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
-  const [userCourt, setUserCourt] = useState(null);
-  const [courtDocId, setCourtDocId] = useState(null);
+  
+  const [courts, setCourts] = useState([]);
+  const [loading, setLoading] = useState(true); // Single loading state for screen
+  
+  // Local state for immediate UI updates
+  const [arenaData, setArenaData] = useState(null);
 
-  // Re-check court data whenever screen gains focus
   useFocusEffect(
     useCallback(() => {
-      if (user) {
-        checkExistingCourt();
-      }
-    }, [user])
+      let isActive = true; // Cleanup handle karne ke liye
+
+      const loadScreenData = async () => {
+        if (!user) return;
+        
+        try {
+          // 1. Hamesha Fresh User Data Fetch karein (Stale data fix)
+          const userDocRef = doc(db, 'users', user.uid);
+          const userSnapshot = await getDoc(userDocRef);
+          
+          if (userSnapshot.exists()) {
+            const freshUserData = userSnapshot.data();
+            
+            if (isActive) {
+              setArenaData(freshUserData);
+            }
+
+            // 2. Agar Arena registered hai, to Courts fetch karein
+            if (freshUserData.arenaName) {
+              const q = query(
+                collection(db, 'courts'),
+                where('ownerId', '==', user.uid)
+              );
+              const courtsSnapshot = await getDocs(q);
+              const courtsList = courtsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+              
+              if (isActive) {
+                setCourts(courtsList);
+              }
+            }
+          }
+        } catch (error) {
+          console.error("Error loading dashboard:", error);
+        } finally {
+          if (isActive) setLoading(false);
+        }
+      };
+
+      setLoading(true);
+      loadScreenData();
+
+      return () => { isActive = false; };
+    }, [user]) // Sirf 'user' par depend karein, userData par nahi
   );
 
-  const checkExistingCourt = async () => {
-    setLoading(true);
-    try {
-      const q = query(
-        collection(db, 'courts'),
-        where('ownerId', '==', user.uid),
-        limit(1)
-      );
-      const querySnapshot = await getDocs(q);
-
-      if (!querySnapshot.empty) {
-        const doc = querySnapshot.docs[0];
-        setUserCourt(doc.data());
-        setCourtDocId(doc.id);
-      } else {
-        setUserCourt(null);
-        setCourtDocId(null);
-      }
-    } catch (error) {
-      console.error('Error checking court: ', error);
-      Alert.alert('Error', 'Could not fetch your court details.');
-    } finally {
-      setLoading(false);
-    }
+  const handleArenaRegistrationSuccess = (newArenaData) => {
+    // Local update taake refresh ki zaroorat na pare
+    setArenaData(prev => ({ ...prev, ...newArenaData }));
+    // Hum dubara fetch bhi trigger kar sakte hain agar chahein
   };
 
-  const handleEditCourt = () => {
-    if (courtDocId) {
-      router.push({
-        pathname: '/myCourt/edit',
-        params: { courtId: courtDocId },
-      });
-    } else {
-      Alert.alert('Error', 'Court ID not found.');
-    }
+  // --- Navigation ---
+  const handleEditCourt = (courtId) => {
+    router.push({ pathname: '/myCourt/edit', params: { courtId } });
+  };
+  const handleManageSlots = (courtId) => {
+    router.push({ pathname: '/myCourt/maintenance', params: { courtId } });
+  };
+  const handleAddCourt = () => {
+    router.push('/myCourt/addCourt');
   };
 
-  // Navigate to Manage Slots (new feature)
-  const handleManageSlots = () => {
-    if (courtDocId) {
-      router.push({
-        pathname: '/myCourt/maintenance',
-        params: { courtId: courtDocId },
-      });
-    } else {
-      Alert.alert('Error', 'Court ID not found.');
-    }
-  };
+  // --- UI STATES ---
 
-  const handleRegistrationSuccess = (newId, newData) => {
-    setCourtDocId(newId);
-    setUserCourt(newData);
-  };
-
-  // --- UI 1: Loading ---
+  // 1. Loading
   if (loading) {
     return (
       <SafeAreaView style={tw`flex-1 items-center justify-center bg-gray-100`}>
@@ -88,87 +134,93 @@ export default function MyCourtScreen() {
     );
   }
 
-  // --- UI 2: Court exists (show details) ---
-  if (userCourt) {
-    const statusColor =
-      userCourt.status === 'approved'
-        ? 'bg-green-100 border-green-500'
-        : userCourt.status === 'pending'
-        ? 'bg-yellow-100 border-yellow-500'
-        : 'bg-red-100 border-red-500';
-
-    const statusText =
-      userCourt.status.charAt(0).toUpperCase() + userCourt.status.slice(1);
-
+  // 2. Show Registration Form (If Arena not registered)
+  if (!arenaData?.arenaName) {
     return (
-      <SafeAreaView style={tw`flex-1 bg-gray-100 p-5`}>
-        <ScrollView>
-          <Text style={tw`text-3xl font-bold text-gray-800 mb-6`}>
-            My Court Details
-          </Text>
-
-          <View style={tw`p-4 border-l-4 rounded-md ${statusColor} mb-6`}>
-            <Text style={tw`text-lg font-semibold text-gray-700`}>
-              Status: {statusText}
-            </Text>
-          </View>
-
-          <Text style={tw`text-2xl font-semibold text-gray-700`}>
-            {userCourt.courtName}
-          </Text>
-          <Text style={tw`text-lg text-gray-600 mt-2`}>
-            {userCourt.address}
-          </Text>
-
-          <Text
-            style={tw`text-lg font-semibold text-gray-600 mt-2 p-2 bg-gray-200 rounded-lg`}
-          >
-            Operating Hours: 24/7 (All Slots)
-          </Text>
-
-          <Text style={tw`text-xl font-bold text-green-700 mt-4`}>
-            Rs. {userCourt.pricePerHour}
-            <Text style={tw`text-base font-normal text-gray-500`}>
-              {' '}
-              / hour
-            </Text>
-          </Text>
-
-          <Pressable
-            style={tw`bg-blue-600 py-3 rounded-lg shadow-md mt-6`}
-            onPress={handleEditCourt}
-          >
-            <Text style={tw`text-white text-center text-lg font-bold`}>
-              Edit Court Details
-            </Text>
-          </Pressable>
-
-          {/* --- NEW BUTTON: Manage Slots --- */}
-          <Pressable
-            style={tw`bg-gray-700 py-3 rounded-lg shadow-md mt-4 flex-row items-center justify-center`}
-            onPress={handleManageSlots}
-          >
-            <Ionicons
-              name="cog-outline"
-              size={18}
-              color="white"
-              style={tw`mr-2`}
-            />
-            <Text style={tw`text-white text-center text-lg font-bold`}>
-              Manage Slot Availability
-            </Text>
-          </Pressable>
-        </ScrollView>
+      <SafeAreaView style={tw`flex-1 bg-gray-100`}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <ArenaRegistrationForm
+          user={user}
+          onRegistrationSuccess={handleArenaRegistrationSuccess}
+        />
       </SafeAreaView>
     );
   }
 
-  // --- UI 3: No court registered (show form) ---
+  // 3. Show Dashboard (If Arena Registered - Pending or Approved)
+  const status = arenaData.status || 'pending';
+  const statusColor =
+    status === 'approved' ? 'bg-green-100 border-green-300'
+    : status === 'pending' ? 'bg-yellow-50 border-yellow-300'
+    : 'bg-red-100 border-red-300';
+
   return (
     <SafeAreaView style={tw`flex-1 bg-gray-100`}>
-      <CourtRegistrationForm
-        user={user}
-        onRegistrationSuccess={handleRegistrationSuccess}
+      <Stack.Screen options={{ headerShown: true, title: arenaData.arenaName || 'My Arena' }} />
+      
+      <FlatList
+        data={courts}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <OwnerCourtCard
+            court={item}
+            onEdit={handleEditCourt}
+            onManageSlots={handleManageSlots}
+          />
+        )}
+        contentContainerStyle={tw`p-5 pb-20`}
+        ListHeaderComponent={
+          <>
+            {/* Arena Status Banner */}
+            <View style={tw`p-4 border border-l-4 rounded-md ${statusColor} mb-6 bg-white shadow-sm`}>
+              <View style={tw`flex-row items-center mb-1`}>
+                 <Ionicons 
+                    name={status === 'approved' ? "checkmark-circle" : "time"} 
+                    size={24} 
+                    color={tw.color(status === 'approved' ? 'green-600' : 'yellow-600')} 
+                    style={tw`mr-2`}
+                 />
+                 <Text style={tw`text-lg font-bold text-gray-800`}>
+                   Status: {status.toUpperCase()}
+                 </Text>
+              </View>
+              {status === 'pending' && (
+                <Text style={tw`text-sm text-gray-600 ml-8`}>
+                   Your arena details are under review.
+                </Text>
+              )}
+            </View>
+            
+            {/* Add Court Button */}
+            <Pressable
+              style={tw`bg-green-600 py-3 rounded-lg shadow-md mb-6 flex-row items-center justify-center`}
+              onPress={handleAddCourt}
+            >
+              <Ionicons name="add-circle" size={24} color="white" style={tw`mr-2`} />
+              <Text style={tw`text-white text-center text-lg font-bold`}>
+                Add New Court
+              </Text>
+            </Pressable>
+            
+            <Text style={tw`text-xl font-bold text-gray-800 mb-4 ml-1`}>
+              Registered Courts
+            </Text>
+          </>
+        }
+        ListEmptyComponent={
+          <View style={tw`items-center justify-center mt-4 p-8 bg-white rounded-lg border border-dashed border-gray-300`}>
+            <Image 
+                source={{ uri: 'https://cdn-icons-png.flaticon.com/512/7486/7486744.png' }} 
+                style={tw`w-16 h-16 opacity-50 mb-3`} 
+            />
+            <Text style={tw`text-lg font-semibold text-gray-400 mt-2`}>
+              No courts added yet
+            </Text>
+            <Text style={tw`text-sm text-gray-400 text-center mt-1`}>
+              Tap "Add New Court" to get started.
+            </Text>
+          </View>
+        }
       />
     </SafeAreaView>
   );

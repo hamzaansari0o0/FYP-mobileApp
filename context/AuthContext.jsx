@@ -1,13 +1,13 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { auth, db } from '../firebase/firebaseConfig';
 import {
   createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signOut,
   onAuthStateChanged,
   sendEmailVerification,
+  signInWithEmailAndPassword,
+  signOut,
 } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { auth, db } from '../firebase/firebaseConfig';
 
 // 1. Context banana
 const AuthContext = createContext();
@@ -77,22 +77,42 @@ export function AuthProvider({ children }) {
     return () => unsubscribe(); 
   }, []);
 
-  // Signup function (ye bilkul theek hai)
+  // === SIGNUP FUNCTION (UPDATED) ===
+  // Isme ab area, fullAddress aur coordinates save ho rahe hain
   const signup = async (formData, selectedRole) => {
-    const { email, password, name, mobileNumber, city } = formData;
+    const { 
+        email, 
+        password, 
+        name, 
+        mobileNumber, 
+        city, 
+        area,         // <-- Added
+        fullAddress,  // <-- Added
+        coordinates   // <-- Added {lat, lng}
+    } = formData;
+
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const newUser = userCredential.user;
+    
     const newUserData = {
       uid: newUser.uid,
       name: name,
       email: email,
       role: selectedRole,
       mobileNumber: mobileNumber,
-      city: city,
-      status: "active", // <-- NAYA: Har naya user "active" hota hai
+      
+      // Location Data Save karein
+      city: city || '',
+      area: area || '',           // <-- Ab ye Database mein save hoga (Zaroori)
+      fullAddress: fullAddress || '', // <-- Ye bhi
+      coordinates: coordinates || null, // <-- Ye bhi
+      
+      status: "active", 
       createdAt: new Date(),
     };
+    
     await setDoc(doc(db, 'users', newUser.uid), newUserData);
+    
     try {
       await sendEmailVerification(newUser);
     } catch (emailError) {
@@ -101,21 +121,17 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // --- YAHAN SE "LOGIN" FUNCTION UPDATE HUA HAI ---
-  // (Ye "disable" check ko login ke waqt hi pakar lega)
+  // --- LOGIN FUNCTION (Waisa hi hai) ---
   const login = async (email, password) => {
-    // 1. Pehle user ko login karwayein
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const loggedInUser = userCredential.user;
 
-    // 2. Email verification check karein
     await loggedInUser.reload();
     if (!loggedInUser.emailVerified) {
       await signOut(auth);
       throw new Error("auth/email-not-verified");
     }
 
-    // 3. (NAYA FIX) Database se check karein ke user "disabled" to nahi
     const userDoc = await getDoc(doc(db, 'users', loggedInUser.uid));
     if (!userDoc.exists()) {
       await signOut(auth);
@@ -124,22 +140,16 @@ export function AuthProvider({ children }) {
     
     const userData = userDoc.data();
     if (userData.status === 'disabled') {
-      // Agar disabled hai, to foran logout karein aur error dein
       await signOut(auth);
       throw new Error("auth/user-disabled");
     }
-    
-    // Agar sab theek hai, to onAuthStateChanged baqi kaam kar lega
   };
-  // --- YAHAN PAR "LOGIN" UPDATE KHATAM HUA HAI ---
 
   // Logout function
   const logout = async () => {
     await signOut(auth);
-    // State (user, userData, role) ab onAuthStateChanged khud clear kar dega
   };
 
-  // Context ki value (Ab userData export karega)
   const value = {
     user,
     userData,

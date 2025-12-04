@@ -1,20 +1,31 @@
 import React from "react";
-import { Tabs } from "expo-router";
+import { Tabs, useSegments } from "expo-router"; // 1. 'useSegments' import karein
 import tw from "twrnc";
 import { Ionicons } from "@expo/vector-icons";
 
 export default function PlayerTabLayout() {
+  const segments = useSegments(); // 2. Route segments get karein
+  
+  // 3. Check karein ke hum 'chat' folder ke andar 'index' ke BAAD wali screen par hain ya nahi
+  // (e.g., /chat/[chatId])
+  const isChatRoom = segments.includes('chat') && segments.length > 2;
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: tw.color("blue-600"),
         tabBarInactiveTintColor: tw.color("gray-400"),
-        tabBarStyle: tw`bg-white border-t border-gray-200 pt-2`,
+        
+        // 4. NAYA DYNAMIC STYLE
+        tabBarStyle: {
+          display: isChatRoom ? 'none' : 'flex', // <-- YEH ASAL FIX HAI
+          ...tw`bg-white border-t border-gray-200 pt-2`,
+        },
         tabBarLabelStyle: tw`text-xs font-medium mb-1`,
       }}
     >
-      {/* Tab 1: Home (Stack Navigator) */}
+      {/* Tab 1: Home */}
       <Tabs.Screen
         name="home"
         options={{
@@ -29,7 +40,7 @@ export default function PlayerTabLayout() {
         }}
       />
 
-      {/* Tab 2: History (Bookings) */}
+      {/* Tab 2: My Bookings */}
       <Tabs.Screen
         name="history"
         options={{
@@ -73,6 +84,15 @@ export default function PlayerTabLayout() {
           ),
         }}
       />
+
+      {/* Hidden Tab: schedule */}
+      <Tabs.Screen
+        name="schedule" 
+        options={{
+          href: null, 
+        }}
+      />
+      
     </Tabs>
   );
 }

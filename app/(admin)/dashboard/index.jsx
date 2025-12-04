@@ -3,9 +3,8 @@ import { View, Text, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router'; // useRouter import karein
+import { useRouter } from 'expo-router';
 
-// Chota reusable button component
 const AdminMenuButton = ({ title, icon, onPress }) => (
   <Pressable
     style={tw`bg-white p-5 rounded-lg shadow-md flex-row items-center justify-between mb-4`}
@@ -29,21 +28,20 @@ export default function AdminDashboard() {
           Dashboard
         </Text>
         
-        {/* --- Navigation Menu --- */}
         <View style={tw`mt-6`}>
+          {/* Manage Users */}
           <AdminMenuButton
             title="Manage Users"
             icon="people-outline"
-            // Naya Path:
             onPress={() => router.push('/(admin)/dashboard/users')} 
           />
+          
+          {/* Manage Arenas (Hierarchical Flow) */}
           <AdminMenuButton
-            title="Manage Courts"
-            icon="football-outline"
-            // Naya Path:
-            onPress={() => router.push('/(admin)/dashboard/courts')} 
+            title="Manage Arenas"
+            icon="business-outline" // Icon change kiya
+            onPress={() => router.push('/(admin)/dashboard/arenas')} 
           />
-          {/* Approvals aur Profile yahan se hata diye, kyunke woh main tabs hain */}
         </View>
       </ScrollView>
     </SafeAreaView>

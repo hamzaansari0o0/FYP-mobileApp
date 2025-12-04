@@ -1,36 +1,50 @@
-import React from 'react';
-import { View, Text, Pressable } from 'react-native';
-import { Link } from 'expo-router';
-import tw from 'twrnc';
-import { Ionicons } from '@expo/vector-icons';
+import React from "react";
+import { View, Text, Pressable, ImageBackground } from "react-native";
+import { Link } from "expo-router";
+import tw from "twrnc";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function CourtCard({ court }) {
+  const courtImage = court.courtImageURL
+    ? { uri: court.courtImageURL }
+    : require("../assets/images/hero-image.png"); 
+
   return (
-    // --- YAHAN LINK UPDATE HUA HAI ---
-    // Pehle: href={`/(player)/${court.id}`}
-    // Ab:     href={`/home/${court.id}`} 
-    // (Kyunke ye home stack ke andar hai)
-    <Link href={`/home/${court.id}`} asChild> 
-      <Pressable style={tw`bg-white p-4 rounded-xl shadow-md mb-4`}>
-        <View style={tw`flex-row items-center`}>
-          <View style={tw`bg-green-100 p-3 rounded-lg`}>
-            <Ionicons name="football-outline" size={24} color={tw.color('green-700')} />
+    <Link href={`/home/${court.id}`} asChild>
+      {/* Height h-36 for standard sizing */}
+      <Pressable style={tw`w-full h-36 rounded-lg overflow-hidden mb-3 shadow-md`}>
+        <ImageBackground
+          source={courtImage}
+          resizeMode="cover"
+          style={tw`flex-1 justify-between p-2`}
+        >
+          <View style={tw`absolute inset-0 bg-black/30`} />
+          
+          {/* Smaller Price Tag */}
+          <View style={tw`self-start bg-green-600/90 px-2 py-0.5 rounded-md`}>
+            <Text style={tw`text-white font-bold text-xs`}>
+              Rs. {court.pricePerHour}/hr
+            </Text>
           </View>
-          <View style={tw`ml-4 flex-1`}>
-            <Text style={tw`text-lg font-bold text-gray-800`} numberOfLines={1}>
+
+          <View>
+            <Text 
+              style={tw`text-lg font-bold text-white shadow-sm`}
+              numberOfLines={1}
+            >
               {court.courtName}
             </Text>
-            <Text style={tw`text-sm text-gray-500`} numberOfLines={1}>
-              {court.address}
-            </Text>
+            <View style={tw`flex-row items-center mt-0.5`}>
+              <Ionicons name="location-sharp" size={12} color={tw.color("white")} />
+              <Text 
+                style={tw`text-xs text-gray-200 shadow-sm ml-1 font-medium`}
+                numberOfLines={1}
+              >
+                {court.address}
+              </Text>
+            </View>
           </View>
-        </View>
-        <View style={tw`mt-4 pt-3 border-t border-gray-100`}>
-          <Text style={tw`text-lg font-bold text-green-700`}>
-            Rs. {court.pricePerHour} 
-            <Text style={tw`text-sm font-normal text-gray-500`}> / hour</Text>
-          </Text>
-        </View>
+        </ImageBackground>
       </Pressable>
     </Link>
   );

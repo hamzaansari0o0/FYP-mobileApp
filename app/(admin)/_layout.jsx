@@ -88,6 +88,21 @@ export default function AdminTabLayout() {
           ),
         }}
       />
+
+      {/* === YEH HAI WO FIX === 
+         Hum 'approvalDetails' ko Tabs layout mein register kar rahe hain
+         taake hum uski styling control kar sakein.
+      */}
+      <Tabs.Screen
+        name="approvalDetails"
+        options={{
+          // 1. href: null -> Iska matlab ye Tab Button ban kar neeche show nahi hoga
+          href: null, 
+          // 2. display: 'none' -> Jab ye screen khulegi, to poora Tab Bar gayab ho jayega
+          tabBarStyle: { display: 'none' }, 
+        }}
+      />
+
     </Tabs>
   );
 }

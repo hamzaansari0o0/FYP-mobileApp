@@ -6,6 +6,7 @@ import {
   browserLocalPersistence     // Yeh Web ke liye hai (sahi naam)
 } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage"; // Storage ko import karein
 import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
@@ -38,8 +39,9 @@ const auth = initializeAuth(app, {
   persistence: persistence
 });
 
-// Baqi services (Firestore)
+// Baqi services (Firestore, Storage)
 const db = getFirestore(app);
+const storage = getStorage(app); // Storage ko initialize karein
 
-// Dono ko export karein
-export { auth, db };
+// Sab ko export karein
+export { auth, db, storage };

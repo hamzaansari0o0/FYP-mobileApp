@@ -6,6 +6,7 @@ import {
   Modal,
   ActivityIndicator,
   Alert,
+  TextInput, // {/* === 1. IMPORTED TextInput === */}
 } from "react-native";
 import tw from "twrnc";
 import { Ionicons } from "@expo/vector-icons";
@@ -17,15 +18,36 @@ export default function PaymentModal({
   onConfirmPayment,
 }) {
   const [isPaying, setIsPaying] = useState(false);
+  // {/* === 2. ADDED STATE FOR JAZZCASH NUMBER === */}
+  const [refundAccountNumber, setRefundAccountNumber] = useState("");
 
   const handlePayment = async () => {
+    // {/* === 3. ADDED VALIDATION === */}
+    if (!refundAccountNumber.trim()) {
+      Alert.alert(
+        "Missing Information",
+        "Please enter your JazzCash number for any potential refunds."
+      );
+      return;
+    }
+    // Optional: Simple validation for 11 digits
+    if (refundAccountNumber.length !== 11 || !/^[0-9]+$/.test(refundAccountNumber)) {
+       Alert.alert(
+        "Invalid Number",
+        "Please enter a valid 11-digit JazzCash number (e.g., 03001234567)."
+      );
+      return;
+    }
+
     try {
       setIsPaying(true);
 
       // 🧾 Simulated Payment Delay (for UX)
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
-      await onConfirmPayment();
+      // {/* === 4. PASSING THE NUMBER TO THE CONFIRM FUNCTION === */}
+      await onConfirmPayment(refundAccountNumber); // Pass the number back
+      
     } catch (error) {
       Alert.alert(
         "Booking Failed",
@@ -73,7 +95,37 @@ export default function PaymentModal({
               Slot: {bookingDetails.timeDisplay}
             </Text>
 
-            <View style={tw`border-t border-gray-200 pt-3`}>
+            {/* === 5. NEW JAZZCASH INPUT FIELD === */}
+            <View style={tw`mt-4`}>
+              <Text style={tw`text-sm font-medium text-gray-700 mb-1`}>
+                Refund JazzCash Number
+              </Text>
+              <View
+                style={tw`flex-row items-center bg-gray-100 border border-gray-300 rounded-lg p-3`}
+              >
+                <Ionicons
+                  name="wallet-outline"
+                  size={20}
+                  color={tw.color("gray-500")}
+                />
+                <TextInput
+                  style={tw`flex-1 ml-2 text-base text-gray-900`}
+                  placeholder="e.g., 03001234567"
+                  placeholderTextColor={tw.color("gray-400")}
+                  keyboardType="phone-pad"
+                  value={refundAccountNumber}
+                  onChangeText={setRefundAccountNumber}
+                  maxLength={11}
+                />
+              </View>
+              <Text style={tw`text-xs text-gray-500 mt-1`}>
+                This number will be used for any potential refunds.
+              </Text>
+            </View>
+            {/* === END OF NEW FIELD === */}
+
+            <View style={tw`border-t border-gray-200 pt-3 mt-5`}>
+              {/* Added mt-5 for spacing */}
               <View style={tw`flex-row justify-between`}>
                 <Text style={tw`text-lg font-bold text-blue-600`}>
                   Full Amount to Pay:

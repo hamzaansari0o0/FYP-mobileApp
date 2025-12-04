@@ -1,35 +1,47 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, FlatList, ActivityIndicator, Alert, Pressable } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import tw from 'twrnc';
-import { db } from '../../firebase/firebaseConfig';
-import { 
-  collection, 
-  query, 
-  where, 
-  getDocs, 
-  orderBy, 
-  doc, 
-  runTransaction, 
+import React, { useState, useCallback } from "react";
+import {
+  View,
+  Text,
+  FlatList,
+  ActivityIndicator,
+  Alert,
+  Pressable,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import tw from "twrnc";
+import { db } from "../../firebase/firebaseConfig";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  doc,
+  runTransaction,
   Timestamp,
-  increment // <-- Refund ke liye
-} from 'firebase/firestore'; 
-import { useAuth } from '../../context/AuthContext';
-import { useFocusEffect } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import moment from 'moment'; 
+  // increment, // {/* === 1. REMOVED 'increment' (No longer needed) === */}
+} from "firebase/firestore";
+import { useAuth } from "../../context/AuthContext";
+import { useFocusEffect } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import moment from "moment";
 
 // --- Owner ki booking card (UPDATED) ---
 const OwnerBookingCard = ({ booking, onCancel, isCancelling }) => {
-  const formattedTime = moment(booking.slotTime, 'HH').format('h:00 A');
-  const bookingStatus = booking.status || 'upcoming';
+  const formattedTime = moment(booking.slotTime, "HH").format("h:00 A");
+  const bookingStatus = booking.status || "upcoming";
+
+  // {/* === 2. ADDED Helper for masked refund account === */}
+  const refundAccountDisplay = booking.playerRefundAccount
+    ? `...${booking.playerRefundAccount.slice(-4)}`
+    : "[No Account]";
 
   return (
     <View style={tw`bg-white p-4 rounded-lg shadow-md mb-4`}>
       <Text style={tw`text-lg font-bold text-gray-800`}>
         Booking by: {booking.playerName}
       </Text>
-      
+
       <View style={tw`flex-row justify-between items-center mt-2`}>
         <Text style={tw`text-base text-gray-600`}>
           <Ionicons name="calendar-outline" size={16} /> {booking.date}
@@ -38,25 +50,29 @@ const OwnerBookingCard = ({ booking, onCancel, isCancelling }) => {
           <Ionicons name="time-outline" size={16} /> {formattedTime}
         </Text>
       </View>
-      
-      <View style={tw`flex-row justify-between items-center mt-3 pt-2 border-t border-gray-100`}>
+
+      <View
+        style={tw`flex-row justify-between items-center mt-3 pt-2 border-t border-gray-100`}
+      >
         <Text style={tw`text-lg font-bold text-green-700`}>
           Paid: Rs. {booking.amountPaid}
         </Text>
         <Text
           style={tw.style(
             `text-sm font-semibold px-2 py-1 rounded-full`,
-            bookingStatus.startsWith('cancelled')
-              ? 'bg-red-100 text-red-600'
-              : 'bg-green-100 text-green-600'
+            bookingStatus.startsWith("cancelled")
+              ? "bg-red-100 text-red-600"
+              : "bg-green-100 text-green-600"
           )}
         >
-          {bookingStatus === 'upcoming' ? 'CONFIRMED' : bookingStatus.toUpperCase()}
+          {bookingStatus === "upcoming"
+            ? "CONFIRMED"
+            : bookingStatus.toUpperCase()}
         </Text>
       </View>
 
       {/* Cancel Button (Owner) */}
-      {bookingStatus === 'upcoming' && (
+      {bookingStatus === "upcoming" && (
         <Pressable
           style={tw.style(
             `bg-red-500 py-2 rounded-lg mt-3`,
@@ -75,10 +91,10 @@ const OwnerBookingCard = ({ booking, onCancel, isCancelling }) => {
         </Pressable>
       )}
 
-      {/* Owner cancelled message */}
-      {bookingStatus === 'cancelled_by_owner' && (
+      {/* === 3. UPDATED Cancelled message (No more wallet) === */}
+      {bookingStatus === "cancelled_by_owner" && (
         <Text style={tw`text-center text-sm text-red-500 mt-2`}>
-          You cancelled this booking. Player was refunded.
+          You cancelled. Player refund (simulated) to {refundAccountDisplay}.
         </Text>
       )}
     </View>
@@ -105,24 +121,24 @@ export default function OwnerDashboard() {
 
     try {
       const q = query(
-        collection(db, 'bookings'),
-        where('ownerId', '==', user.uid),
-        where('slotEndDateTime', '>', Timestamp.now()),
-        orderBy('slotEndDateTime', 'asc')
+        collection(db, "bookings"),
+        where("ownerId", "==", user.uid),
+        where("slotEndDateTime", ">", Timestamp.now()),
+        orderBy("slotEndDateTime", "asc")
       );
 
       const querySnapshot = await getDocs(q);
       const bookingsList = querySnapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() }))
-        .filter(booking => booking.status !== 'completed_and_paid');
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .filter((booking) => booking.status !== "completed_and_paid");
 
       setBookings(bookingsList);
     } catch (error) {
-      console.error('Error fetching owner bookings:', error.message);
-      if (error.code === 'failed-precondition') {
-        Alert.alert('Index Required', 'Please check console for index link.');
+      console.error("Error fetching owner bookings:", error.message);
+      if (error.code === "failed-precondition") {
+        Alert.alert("Index Required", "Please check console for index link.");
       } else {
-        Alert.alert('Error', 'Could not fetch your bookings.');
+        Alert.alert("Error", "Could not fetch your bookings.");
       }
     } finally {
       setLoading(false);
@@ -131,14 +147,19 @@ export default function OwnerDashboard() {
 
   // --- Owner Cancellation Logic ---
   const handleOwnerCancel = (booking) => {
+    // {/* === 4. UPDATED Confirmation Alert (No more wallet) === */}
+    const refundAccountDisplay = booking.playerRefundAccount
+      ? `...${booking.playerRefundAccount.slice(-4)}`
+      : "[No Account]";
+
     Alert.alert(
-      'Owner Cancellation (Maintenance)',
-      `Are you sure? This will cancel the booking, block this slot as "unavailable", AND issue a FULL REFUND of Rs. ${booking.amountPaid} to the player's wallet.`,
+      "Owner Cancellation (Maintenance)",
+      `Are you sure? This will cancel the booking, block the slot, AND issue a FULL (Simulated) REFUND of Rs. ${booking.amountPaid} to the player's account (${refundAccountDisplay}).`,
       [
-        { text: 'Go Back', style: 'cancel' },
+        { text: "Go Back", style: "cancel" },
         {
-          text: 'Confirm Cancel & Refund',
-          style: 'destructive',
+          text: "Confirm Cancel & Refund",
+          style: "destructive",
           onPress: () => performOwnerCancellation(booking),
         },
       ]
@@ -149,10 +170,16 @@ export default function OwnerDashboard() {
   const performOwnerCancellation = async (booking) => {
     setCancellingId(booking.id);
 
-    const bookingRef = doc(db, 'bookings', booking.id);
-    const slotRef = doc(db, 'court_slots', `${booking.courtId}_${booking.date}`);
-    const playerUserRef = doc(db, 'users', booking.playerId);
+    const bookingRef = doc(db, "bookings", booking.id);
+    const slotRef = doc(db, "court_slots", `${booking.courtId}_${booking.date}`);
+    // {/* === 5. REMOVED playerUserRef (No longer needed) === */}
+    // const playerUserRef = doc(db, 'users', booking.playerId);
     const refundAmount = booking.amountPaid;
+
+    // {/* === 6. ADDED refundAccountDisplay for success alert === */}
+    const refundAccountDisplay = booking.playerRefundAccount
+      ? `...${booking.playerRefundAccount.slice(-4)}`
+      : "[No Account]";
 
     try {
       await runTransaction(db, async (transaction) => {
@@ -160,30 +187,31 @@ export default function OwnerDashboard() {
         const slotDoc = await transaction.get(slotRef);
         if (slotDoc.exists()) {
           const slotsMap = slotDoc.data().slots;
-          slotsMap[booking.slotTime] = 'unavailable';
+          slotsMap[booking.slotTime] = "unavailable"; // 'unavailable' for maintenance
           transaction.update(slotRef, { slots: slotsMap });
         }
 
         // Step 2: Booking status update
         transaction.update(bookingRef, {
-          status: 'cancelled_by_owner',
-          cancellationReason: 'Maintenance',
+          status: "cancelled_by_owner",
+          cancellationReason: "Maintenance",
         });
 
-        // Step 3: Player refund
-        transaction.update(playerUserRef, {
-          walletCredit: increment(refundAmount),
-        });
+        // {/* === 7. REMOVED Step 3 (Player refund to wallet) === */}
+        // transaction.update(playerUserRef, {
+        //   walletCredit: increment(refundAmount),
+        // });
       });
 
+      // {/* === 8. UPDATED Success Alert (No more wallet) === */}
       Alert.alert(
-        'Success',
-        'Booking cancelled. The slot is now blocked and the player has been refunded.'
+        "Success",
+        `Booking cancelled. The slot is blocked and the player's (Simulated) refund to ${refundAccountDisplay} has been processed.`
       );
       fetchOwnerBookings();
     } catch (error) {
-      console.error('Owner cancellation failed:', error);
-      Alert.alert('Error', 'Failed to cancel booking.');
+      console.error("Owner cancellation failed:", error);
+      Alert.alert("Error", "Failed to cancel booking.");
     } finally {
       setCancellingId(null);
     }
@@ -199,7 +227,7 @@ export default function OwnerDashboard() {
         {loading ? (
           <ActivityIndicator
             size="large"
-            color={tw.color('green-600')}
+            color={tw.color("green-600")}
             style={tw`mt-20`}
           />
         ) : (
@@ -218,7 +246,7 @@ export default function OwnerDashboard() {
                 <Ionicons
                   name="sad-outline"
                   size={40}
-                  color={tw.color('gray-400')}
+                  color={tw.color("gray-400")}
                 />
                 <Text style={tw`text-lg text-gray-500 mt-2`}>
                   You have no upcoming bookings.
