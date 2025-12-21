@@ -1,19 +1,19 @@
-import React, { useState, useCallback, useMemo } from "react"; // 1. useMemo import karein
+import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "expo-router";
+import { collection, getDocs, query, where } from "firebase/firestore";
+import { useCallback, useMemo, useState } from "react"; // 1. useMemo import karein
 import {
-  View,
-  Text,
-  FlatList,
   ActivityIndicator,
   Alert,
-  TextInput, // 2. TextInput import karein
+  FlatList,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import tw from "twrnc";
+import ArenaCard from "../../../components/specific/ArenaCard.jsx";
 import { db } from "../../../firebase/firebaseConfig";
-import { collection, query, where, getDocs } from "firebase/firestore";
-import { useFocusEffect } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
-import ArenaCard from "../../../components/specific/ArenaCard.jsx"; 
 
 export default function AllOwnersScreen() {
   const [arenas, setArenas] = useState([]); // Yeh master list hai

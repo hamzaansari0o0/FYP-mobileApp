@@ -1,0 +1,156 @@
+
+My-APP — complete repository file tree (relative paths)
+
+.
+├─ .gitignore
+├─ .env
+├─ .idea/
+│  ├─ caches/
+│  │  └─ deviceStreaming.xml
+│  ├─ deviceManager.xml
+│  ├─ misc.xml
+│  ├─ modules.xml
+│  ├─ my-app.iml
+│  ├─ vcs.xml
+│  └─ .gitignore
+├─ .vscode/
+│  ├─ extensions.json
+│  └─ settings.json
+├─ app.json
+├─ app/
+│  ├─ _layout.jsx
+│  ├─ index.jsx
+│  ├─ (admin)/
+│  │  ├─ _layout.jsx
+│  │  ├─ approvalDetails.jsx
+│  │  ├─ approvals.jsx
+│  │  ├─ payouts.jsx
+│  │  ├─ profile.jsx
+│  │  ├─ transactions.jsx
+│  │  ├─ dashboard/
+│  │  │  ├─ _layout.jsx
++│  │  │  ├─ arenas.jsx
+│  │  │  ├─ courts.jsx
+│  │  │  ├─ index.jsx
+│  │  │  ├─ users.jsx
+│  │  │  └─ arenaCourts/
+│  │  │     └─ [ownerId].jsx
+│  │  ├─ AdminSupportScreen.jsx
+│  ├─ (auth)/
+│  │  ├─ _layout.jsx
+│  │  ├─ login.jsx
+│  │  └─ signup.jsx
+│  ├─ (owner)/
+│  │  ├─ _layout.jsx
+│  │  ├─ dashboard.jsx
+│  │  ├─ notifications.jsx
+│  │  ├─ profile.jsx
+│  │  ├─ myCourt/
+│  │  │  ├─ _layout.jsx
+│  │  │  ├─ addCourt.jsx
+│  │  │  ├─ edit.jsx
+│  │  │  ├─ index.jsx
+│  │  │  └─ maintenance.jsx
+│  │  └─ tournaments/
+│  │     ├─ _layout.jsx
+│  │     ├─ create.jsx
+│  │     ├─ index.jsx
+│  │     ├─ details/
+│  │     │  └─ [tournamentId].jsx
+│  │     └─ edit/
+│  │        └─ [tournamentId].jsx
+│  └─ (player)/
+│     ├─ _layout.jsx
+│     ├─ history.jsx
+│     ├─ notifications.jsx
+│     ├─ profile.jsx
+│     ├─ chat/
+│     │  ├─ _layout.jsx
+│     │  ├─ [chatId].jsx
+│     │  ├─ index.jsx
+│     │  └─ new.jsx
+│     ├─ home/
+│     │  ├─ _layout.jsx
+│     │  ├─ [courtId].jsx
+│     │  ├─ allOwners.jsx
+│     │  ├─ contactUs.jsx
+│     │  ├─ index.jsx
+│     │  ├─ terms.jsx
+│     │  ├─ tournaments.jsx
+│     │  ├─ ownerDetails/
+│     │  │  └─ [ownerId].jsx
+│     │  ├─ teamRegistration/
+│     │  │  └─ [tournamentId].jsx
+│     │  ├─ tournamentDetails/
+│     │  │  └─ [tournamentId].jsx
+│     │  ├─ howItWorks.jsx
+│     │  └─ about.jsx
+│     └─ schedule/
+│        ├─ _layout.jsx
++│        └─ matchschedule.jsx
+├─ assets/
+│  └─ images/
+│     ├─ android-icon-background.png
+│     ├─ android-icon-foreground.png
+│     ├─ android-icon-monochrome.png
+│     ├─ courtchuno-logo.png
+│     ├─ default-profile.png
+│     ├─ favicon.png
+│     ├─ hero-image.png
+│     ├─ hero-image.webp
+│     ├─ icon.png
+│     ├─ partial-react-logo.png
+│     ├─ react-logo.png
+│     ├─ react-logo@2x.png
+│     ├─ react-logo@3x.png
+│     ├─ splash-icon.png
+│     ├─ loginForm-image.jpg
+│     ├─ tournament-image-1.jpg
+│     └─ tournament-futsal-image-3.jpg
+├─ components/
+│  ├─ CourtCard.jsx
+│  ├─ UserProfile.jsx
+│  └─ specific/
+│     ├─ ArenaCard.jsx.jsx
+│     ├─ ArenaRegistrationForm.jsx
+│     ├─ CourtRegistrationForm.jsx
+│     ├─ PaymentModal.jsx
+│     ├─ SlotPicker.jsx
+│     ├─ TournamentCard.jsx
+│     ├─ TournamentRegistrationForm.jsx
+│     ├─ chat/
+│     │  ├─ MatchChallengeModal.jsx
+│     │  └─ MatchRequestBubble.jsx
+│     └─ home/
+│        ├─ HeroSection.jsx
+│        ├─ HomeHeader.jsx
+│        ├─ HowItWorks.jsx
+│        └─ introduction.jsx
+│     └─ tournaments/
+│        ├─ MatchScheduleList.jsx
+│        ├─ RegisteredTeamList.jsx
+│        └─ UpdateScoreModal.jsx
+├─ constants/
+│  └─ theme.ts
+├─ context/
+│  └─ AuthContext.jsx
+├─ firebase/
+│  └─ firebaseConfig.js
+├─ hooks/
+│  ├─ use-color-scheme.ts
+│  ├─ use-color-scheme.web.ts
+│  └─ use-theme-color.ts
+├─ scripts/
+│  └─ reset-project.js
+├─ utils/
+│  └─ notifications.js
+├─ babel.config.js
+├─ eas.json
+├─ eslint.config.js
+├─ google-services.json
+├─ package.json
+├─ package-lock.json
+├─ README.md
+├─ tsconfig.json
+└─ My-APP-structure.txt
+

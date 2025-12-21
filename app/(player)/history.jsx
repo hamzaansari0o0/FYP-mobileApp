@@ -1,119 +1,254 @@
-import React, { useState, useCallback } from "react";
+import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import { useFocusEffect, useRouter } from "expo-router";
 import {
-  View,
-  Text,
-  FlatList,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  runTransaction,
+  where
+} from "firebase/firestore";
+import moment from "moment";
+import { useCallback, useState } from "react";
+import {
   ActivityIndicator,
   Alert,
+  FlatList,
+  Linking,
+  Platform,
   Pressable,
+  RefreshControl,
+  StatusBar,
+  Text,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import tw from "twrnc";
-import { db } from "../../firebase/firebaseConfig";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  orderBy,
-  doc,
-  runTransaction,
-  Timestamp,
-  // increment, // {/* === 1. REMOVED 'increment' (no longer needed) === */}
-} from "firebase/firestore";
 import { useAuth } from "../../context/AuthContext";
-import { useFocusEffect } from "expo-router";
-import moment from "moment";
-import { Ionicons } from "@expo/vector-icons";
+import { db } from "../../firebase/firebaseConfig";
 
-/* 🧾 Booking Card Component (Player Side) */
+// --- 🔥 1. MAP OPENING LOGIC (Standard) ---
+const openMapsForDirections = (lat, lng, label) => {
+    const scheme = Platform.select({ ios: 'maps:0,0?q=', android: 'geo:0,0?q=' });
+    const latLng = `${lat},${lng}`;
+    const labelEncoded = encodeURIComponent(label);
+    
+    const url = Platform.select({
+        ios: `${scheme}${labelEncoded}@${latLng}`,
+        android: `${scheme}${latLng}(${labelEncoded})`
+    });
+
+    Linking.openURL(url).catch(err => {
+        Linking.openURL(`http://googleusercontent.com/maps.google.com/maps?q=${lat},${lng}`);
+    });
+};
+
+/* 🧾 Booking Card Component (Updated for Multi-Slots) */
 const BookingCard = ({ booking, onCancel, isCancelling }) => {
-  const formattedTime = moment(booking.slotTime, "HH").format("h:00 A");
-  const bookingStartTime = moment(booking.slotDateTime.toDate());
-  const now = moment();
+  const [loadingMap, setLoadingMap] = useState(false); 
 
-  const hoursRemaining = bookingStartTime.diff(now, "hours");
-  const canCancel = hoursRemaining > 3 && booking.status === "upcoming";
+  // --- 🔥 UPDATE 1: Handling Multi-Slot Time Display ---
+  // Agar 'timeDisplayRange' (Multi) hai to wo dikhaye, warna purana single time
+  const displayTime = booking.timeDisplayRange 
+    ? booking.timeDisplayRange 
+    : (booking.slotTime ? moment(booking.slotTime, "HH:mm").format("h:00 A") : "Time N/A");
 
-  // {/* === 2. HELPER TO SAFELY MASK ACCOUNT NUMBER === */}
+  const slotCount = booking.slotCount || 1;
+
+  const displayDate = booking.date 
+    ? moment(booking.date).format("ddd, DD MMM YYYY") 
+    : moment(booking.slotDateTime.toDate()).format("ddd, DD MMM YYYY");
+
+  // --- 🔥 UPDATE 2: Cancellation Time Logic for Multi-Slots ---
+  let bookingTimestamp;
+  if (booking.slotDateTime?.toDate) {
+      bookingTimestamp = booking.slotDateTime.toDate();
+  } else {
+      // New Logic: Agar bookedHours array hai, to uska pehla ghanta uthao
+      const firstHour = booking.bookedHours ? booking.bookedHours[0] : booking.slotTime;
+      bookingTimestamp = moment(`${booking.date}T${firstHour}:00`, "YYYY-MM-DDTHH:mm").toDate();
+  }
+
+  const hoursRemaining = moment(bookingTimestamp).diff(moment(), "hours");
+  const isCancelled = booking.status.startsWith("cancelled");
+  const isUpcoming = booking.status === "upcoming";
+  const canCancel = hoursRemaining >= 4 && isUpcoming; 
+
   const refundAccountDisplay = booking.playerRefundAccount
-    ? `...${booking.playerRefundAccount.slice(-4)}` // Shows last 4 digits
-    : "[No Account Saved]";
+    ? `...${booking.playerRefundAccount.slice(-4)}`
+    : "Wallet";
+
+  // --- INTELLIGENT DIRECTION HANDLER ---
+  const handleDirectionPress = async () => {
+    setLoadingMap(true);
+    try {
+        let lat = booking.location?.latitude;
+        let lng = booking.location?.longitude;
+        const arenaName = booking.arenaName || "Arena";
+
+        if (lat && lng) {
+            openMapsForDirections(lat, lng, arenaName);
+            setLoadingMap(false);
+            return;
+        }
+
+        if (booking.ownerId) {
+            const ownerRef = doc(db, "users", booking.ownerId);
+            const ownerSnap = await getDoc(ownerRef);
+
+            if (ownerSnap.exists()) {
+                const ownerData = ownerSnap.data();
+                if (ownerData.location && ownerData.location.latitude) {
+                    lat = ownerData.location.latitude;
+                    lng = ownerData.location.longitude;
+                    openMapsForDirections(lat, lng, ownerData.arenaName || arenaName);
+                } else {
+                    Alert.alert("Location Not Found", "The arena owner hasn't set a pinned location.");
+                }
+            } else {
+                Alert.alert("Error", "Arena details not found.");
+            }
+        } else {
+             const address = booking.arenaAddress || arenaName;
+             const url = Platform.select({
+                ios: `maps:0,0?q=${encodeURIComponent(address)}`,
+                android: `geo:0,0?q=${encodeURIComponent(address)}`
+            });
+            Linking.openURL(url);
+        }
+
+    } catch (error) {
+        console.error("Map Error:", error);
+        Alert.alert("Error", "Could not fetch location.");
+    } finally {
+        setLoadingMap(false);
+    }
+  };
 
   return (
-    <View style={tw`bg-white p-4 rounded-lg shadow-md mb-4`}>
-      <Text style={tw`text-lg font-bold text-gray-800`}>
-        Booking for: {booking.playerName}
-      </Text>
-      <Text style={tw`text-base text-gray-600 mt-1`}>Date: {booking.date}</Text>
-      <Text style={tw`text-base text-gray-600`}>Time: {formattedTime}</Text>
+    <View style={tw`bg-white rounded-xl shadow-sm mb-4 border border-gray-100 overflow-hidden`}>
+      <View style={tw`h-1.5 ${isCancelled ? 'bg-red-500' : 'bg-green-600'}`} />
 
-      {/* Payment details */}
-      <Text style={tw`text-base text-gray-600 mt-2`}>
-        Amount Paid:{" "}
-        <Text style={tw`font-bold text-green-700`}>
-          Rs. {booking.amountPaid}
-        </Text>
-      </Text>
+      <View style={tw`p-4`}>
+        {/* Arena Name */}
+        <View style={tw`flex-row justify-between items-start mb-2`}>
+          <View style={tw`flex-1 mr-2`}>
+            <Text style={tw`text-lg font-bold text-gray-900 leading-tight`}>
+              {booking.arenaName || "Arena Name Missing"}
+            </Text>
+            <Text style={tw`text-xs text-gray-500 font-medium uppercase mt-1`}>
+              {booking.courtName || "Court Details Missing"}
+            </Text>
+          </View>
+          
+          <View style={tw`px-2 py-1 rounded-md ${isCancelled ? 'bg-red-50' : 'bg-green-50'}`}>
+            <Text style={tw`text-xs font-bold ${isCancelled ? 'text-red-700' : 'text-green-700'} uppercase`}>
+              {isCancelled ? "Cancelled" : "Confirmed"}
+            </Text>
+          </View>
+        </View>
 
-      {/* --- Cancellation Button --- */}
-      {booking.status === "upcoming" && (
-        <View style={tw`mt-4 pt-3 border-t border-gray-100`}>
-          {canCancel ? (
-            <Pressable
-              style={tw.style(
-                `bg-red-500 py-2 rounded-lg`,
-                isCancelling && `bg-red-300`
-              )}
-              onPress={() => onCancel(booking)}
-              disabled={isCancelling}
-            >
-              {isCancelling ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={tw`text-white text-center font-bold`}>
-                  Cancel Booking
+        {/* Directions Button */}
+        <Pressable 
+            onPress={handleDirectionPress}
+            disabled={loadingMap}
+            style={tw`flex-row items-center justify-center bg-blue-600 py-2.5 rounded-lg mb-4 shadow-sm active:bg-blue-700`}
+        >
+            {loadingMap ? (
+                <ActivityIndicator size="small" color="white" />
+            ) : (
+                <>
+                    <MaterialIcons name="directions" size={20} color="white" style={tw`mr-2`} />
+                    <Text style={tw`text-white font-bold text-sm`}>Get Directions</Text>
+                </>
+            )}
+        </Pressable>
+
+        {/* Booking Info */}
+        <View style={tw`bg-gray-50 p-3 rounded-lg mb-3`}>
+            <View style={tw`flex-row items-center mb-2`}>
+                <Ionicons name="calendar" size={16} color="#4B5563" />
+                <Text style={tw`text-gray-700 ml-2 text-sm font-medium`}>
+                    {displayDate}
                 </Text>
-              )}
-            </Pressable>
-          ) : (
-            <View style={tw`bg-gray-200 py-2 rounded-lg`}>
-              <Text style={tw`text-sm text-center text-gray-500`}>
-                Cancellation locked (Less than 3 hours left)
-              </Text>
             </View>
-          )}
-        </View>
-      )}
 
-      {/* --- Cancelled Booking Info --- */}
-      {booking.status.startsWith("cancelled") && (
-        <View style={tw`mt-4 pt-3 border-t border-gray-100 items-center`}>
-          <Text style={tw`text-lg font-bold text-red-600`}>
-            Booking Cancelled
-          </Text>
-          {/* === 3. UPDATED TEXT (No more wallet) === */}
-          {booking.status === "cancelled_by_player" && (
-            <Text style={tw`text-sm text-gray-600`}>
-              (Refund simulated to {refundAccountDisplay})
-            </Text>
-          )}
-          {booking.status === "cancelled_by_owner" && (
-            <Text style={tw`text-sm text-gray-600`}>
-              (Cancelled by Court Owner)
-            </Text>
-          )}
+            <View style={tw`flex-row items-start`}>
+                <Ionicons name="time" size={16} color="#4B5563" style={tw`mt-0.5`} />
+                <View style={tw`ml-2 flex-1`}>
+                    <Text style={tw`text-gray-700 text-sm font-medium`}>
+                        {displayTime}
+                    </Text>
+                    {/* Show Slot Count Logic */}
+                    {slotCount > 1 && (
+                        <Text style={tw`text-blue-600 text-xs font-bold mt-0.5`}>
+                            ({slotCount} Slots Booked)
+                        </Text>
+                    )}
+                </View>
+            </View>
         </View>
-      )}
+
+        <View style={tw`flex-row items-center justify-between`}>
+          <View style={tw`flex-row items-center`}>
+            <Ionicons name="cash-outline" size={18} color="#059669" />
+            <Text style={tw`text-gray-600 ml-2 text-sm`}>Amount Paid:</Text>
+          </View>
+          <Text style={tw`font-bold text-green-700 text-base`}>Rs. {booking.amountPaid}</Text>
+        </View>
+
+        {/* Cancel Actions */}
+        {isUpcoming && (
+          <View style={tw`mt-4 pt-3 border-t border-gray-100`}>
+            {canCancel ? (
+              <Pressable
+                style={tw.style(
+                  `flex-row justify-center items-center border border-red-200 bg-red-50 py-2.5 rounded-lg`,
+                  isCancelling && `opacity-50`
+                )}
+                onPress={() => onCancel(booking)}
+                disabled={isCancelling}
+              >
+                {isCancelling ? (
+                  <ActivityIndicator size="small" color="#EF4444" />
+                ) : (
+                  <>
+                    <Ionicons name="close-circle-outline" size={18} color="#DC2626" />
+                    <Text style={tw`text-red-700 font-bold ml-2 text-sm`}>Cancel Booking</Text>
+                  </>
+                )}
+              </Pressable>
+            ) : (
+              <View style={tw`bg-gray-100 py-2 rounded-lg flex-row justify-center items-center`}>
+                 <Ionicons name="lock-closed" size={14} color="#6B7280" />
+                <Text style={tw`text-xs text-center text-gray-500 font-medium ml-2`}>
+                  Cannot cancel (Less than 4 hours left)
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {isCancelled && (
+          <View style={tw`mt-3 bg-red-50 p-2 rounded-lg border border-red-100`}>
+             <Text style={tw`text-xs text-red-600 text-center`}>
+                Refund initiated to {refundAccountDisplay}
+             </Text>
+          </View>
+        )}
+      </View>
     </View>
   );
 };
 
-/* 🏠 Player History Screen */
+/* 🏠 Main History Screen */
 export default function HistoryScreen() {
   const { user } = useAuth();
+  const router = useRouter();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [cancellingId, setCancellingId] = useState(null);
 
   useFocusEffect(
@@ -122,58 +257,81 @@ export default function HistoryScreen() {
     }, [user])
   );
 
-  /* 🔹 Fetch Player's Bookings */
+  // --- 🔥 UPDATE 3: Sorting Logic (Nearest First) ---
   const fetchMyBookings = async () => {
-    setLoading(true);
     try {
+      // 1. Get ALL user bookings (No orderBy inside query to avoid Type errors)
       const q = query(
         collection(db, "bookings"),
-        where("playerId", "==", user.uid),
-        orderBy("slotDateTime", "desc")
+        where("playerId", "==", user.uid)
       );
 
       const querySnapshot = await getDocs(q);
-      const now = Timestamp.now();
+      const now = moment();
 
       const bookingsList = querySnapshot.docs
-        .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }))
-        .filter((booking) => {
-          // Skip completed bookings
-          if (booking.status === "completed_and_paid") return false;
+        .map((docSnap) => {
+            const data = docSnap.data();
+            
+            // Generate a 'sortTime' object for consistent sorting
+            let sortTime;
+            if (data.date && data.bookedHours && data.bookedHours.length > 0) {
+                // New Format: Use the FIRST booked hour
+                sortTime = moment(`${data.date}T${data.bookedHours[0]}:00`, "YYYY-MM-DDTHH:mm");
+            } else if (data.slotDateTime) {
+                // Old Format: Use Timestamp
+                sortTime = moment(data.slotDateTime.toDate());
+            } else {
+                 // Error Case: Push to end
+                 sortTime = moment().add(10, 'years');
+            }
 
-          // Show only upcoming / active bookings
-          if (booking.slotEndDateTime) {
-            return booking.slotEndDateTime.toMillis() > now.toMillis();
+            return { id: docSnap.id, ...data, sortTime };
+        })
+        .filter((booking) => {
+          // Filter out OLD completed bookings if you only want Upcoming
+          // Or keep them but ensure cancelled/expired logic is correct
+          // Logic: Show if Upcoming OR (Completed but not too old?)
+          // For now, let's keep your original filter logic:
+          
+          if (booking.status === "completed_and_paid") return false; // Hide old completed
+          
+          // Check expiry
+          if (booking.sortTime.isBefore(now) && booking.status !== 'upcoming') {
+              return false; // Hide past bookings
           }
           return true;
-        });
+        })
+        // Sort: Sabse chota time (Nearest Future) sabse pehle
+        .sort((a, b) => a.sortTime.valueOf() - b.sortTime.valueOf());
 
       setBookings(bookingsList);
     } catch (error) {
-      console.error("Error fetching bookings:", error.message);
-      if (error.code === "failed-precondition") {
-        Alert.alert(
-          "Index Required",
-          "Please check your terminal for the Firestore index link."
-        );
+      console.error("Error fetching bookings:", error);
+      if(error.code === 'failed-precondition') {
+        Alert.alert("System Update", "Optimizing database... please reload in 2 minutes.");
       }
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  /* 🔹 Cancel Booking Confirmation */
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchMyBookings();
+  };
+
   const handleCancelBooking = (booking) => {
-    // {/* === 4. UPDATED CONFIRMATION ALERT (No more wallet) === */}
     const refundAccountDisplay = booking.playerRefundAccount
       ? `...${booking.playerRefundAccount.slice(-4)}`
-      : "[No Account Found]";
+      : "your registered method";
       
     Alert.alert(
       "Confirm Cancellation",
-      `Are you sure you want to cancel? A (Simulated) refund of Rs. ${booking.amountPaid} will be sent to your JazzCash account (${refundAccountDisplay}).`,
+      `Are you sure? This will cancel ${booking.slotCount || 1} slot(s).\n\nRefund: Rs. ${booking.amountPaid}\nTo: ${refundAccountDisplay}`,
       [
-        { text: "No", style: "cancel" },
+        { text: "No, Keep it", style: "cancel" },
         {
           text: "Yes, Cancel",
           style: "destructive",
@@ -182,95 +340,97 @@ export default function HistoryScreen() {
       ]
     );
   };
+  
 
-  /* 🔹 Perform Firestore Transaction (Full Refund) */
+
+  // --- 🔥 UPDATE 4: Cancellation Logic for Multi-Slots ---
   const performCancellation = async (booking) => {
     setCancellingId(booking.id);
-
     const bookingRef = doc(db, "bookings", booking.id);
-    const slotRef = doc(db, "court_slots", `${booking.courtId}_${booking.date}`);
-    // {/* === 5. REMOVED playerRef (No longer needed for wallet) === */}
-    // const playerRef = doc(db, "users", booking.playerId);
-
-    const refundAmount = booking.amountPaid;
-    const refundAccountDisplay = booking.playerRefundAccount
-      ? `...${booking.playerRefundAccount.slice(-4)}`
-      : "[No Account Found]";
+    const slotDocId = `${booking.courtId}_${booking.date}`; 
+    const slotRef = doc(db, "court_slots", slotDocId);
 
     try {
       await runTransaction(db, async (transaction) => {
-        // Step 1: Free the court slot
         const slotDoc = await transaction.get(slotRef);
+        
         if (slotDoc.exists()) {
-          const slotsMap = slotDoc.data().slots;
-          slotsMap[booking.slotTime] = "available";
+          const slotsMap = slotDoc.data().slots || {};
+          
+          // Determine which slots to free (New Array vs Old Single String)
+          const slotsToFree = booking.bookedHours || [booking.slotTime];
+
+          // Loop through ALL booked hours and free them
+          slotsToFree.forEach((hour) => {
+              if (slotsMap[hour]) {
+                  slotsMap[hour] = "available";
+              }
+          });
+
+          // Update the slots document
           transaction.update(slotRef, { slots: slotsMap });
         }
-
-        // Step 2: Mark booking as cancelled
+        
+        // Update booking status
         transaction.update(bookingRef, { status: "cancelled_by_player" });
-
-        // {/* === 6. REMOVED Step 3 (No more wallet increment) === */}
-        // transaction.update(playerRef, {
-        //   walletCredit: increment(refundAmount),
-        // });
       });
 
-      // {/* === 7. UPDATED SUCCESS ALERT (No more wallet) === */}
-      Alert.alert(
-        "Success",
-        `Your booking has been cancelled. A (Simulated) refund of Rs. ${refundAmount} has been processed to your account (${refundAccountDisplay}).`
-      );
-
-      fetchMyBookings();
+      Alert.alert("Success", "Booking Cancelled. Refund initiated.");
+      fetchMyBookings(); // Refresh list immediately
     } catch (error) {
-      console.error("Cancellation Transaction Failed:", error);
-      Alert.alert("Error", "Failed to cancel booking. Please try again.");
+      console.error("Cancellation Failed:", error);
+      Alert.alert("Error", "Network error. Could not cancel.");
     } finally {
       setCancellingId(null);
     }
   };
 
-  /* 🔹 UI */
   return (
-    <SafeAreaView style={tw`flex-1 bg-gray-100`}>
-      <View style={tw`p-5`}>
-        <Text style={tw`text-3xl font-bold text-blue-800 mb-5`}>
-          My Bookings
-        </Text>
-
-        {loading ? (
-          <ActivityIndicator
-            size="large"
-            color={tw.color("blue-600")}
-            style={tw`mt-20`}
-          />
-        ) : (
-          <FlatList
-            data={bookings}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <BookingCard
-                booking={item}
-                onCancel={handleCancelBooking}
-                isCancelling={cancellingId === item.id}
-              />
-            )}
-            ListEmptyComponent={
-              <View style={tw`items-center justify-center mt-20`}>
-                <Ionicons
-                  name="sad-outline"
-                  size={40}
-                  color={tw.color("gray-400")}
-                />
-                <Text style={tw`text-lg text-gray-500`}>
-                  You have no upcoming bookings.
-                </Text>
-              </View>
-            }
-          />
-        )}
+    <SafeAreaView style={tw`flex-1 bg-gray-50`}>
+       <StatusBar barStyle="dark-content" backgroundColor="#f9fafb" />
+       
+      <View style={tw`px-5 py-4 bg-white border-b border-gray-200 mb-2`}>
+        <Text style={tw`text-2xl font-bold text-gray-900`}>My Bookings</Text>
+        <Text style={tw`text-gray-500 text-xs`}>Your upcoming games schedule</Text>
       </View>
+
+      {loading ? (
+        <ActivityIndicator size="large" color={tw.color("green-600")} style={tw`mt-20`} />
+      ) : (
+        <FlatList
+          data={bookings}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={tw`p-5 pb-20`}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[tw.color("green-600")]} />
+          }
+          renderItem={({ item }) => (
+            <BookingCard
+              booking={item}
+              onCancel={handleCancelBooking}
+              isCancelling={cancellingId === item.id}
+            />
+          )}
+          ListEmptyComponent={
+            <View style={tw`items-center justify-center mt-20 px-10`}>
+              <View style={tw`bg-gray-100 p-6 rounded-full mb-4`}>
+                <Ionicons name="calendar-outline" size={50} color={tw.color("gray-400")} />
+              </View>
+              <Text style={tw`text-lg font-bold text-gray-800`}>No Upcoming Bookings</Text>
+              <Text style={tw`text-center text-gray-500 mt-2 mb-6 leading-5`}>
+                Your scheduled games will appear here with full details.
+              </Text>
+              
+              <Pressable 
+                onPress={() => router.push("/(player)/home")}
+                style={tw`bg-green-700 px-6 py-3 rounded-full shadow-lg shadow-green-200`}
+              >
+                <Text style={tw`text-white font-bold`}>Book a Court Now</Text>
+              </Pressable>
+            </View>
+          }
+        />
+      )}
     </SafeAreaView>
   );
 }

@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, Pressable, Alert, ActivityIndicator, ScrollView } from 'react-native';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { collection, doc, increment, runTransaction, serverTimestamp } from 'firebase/firestore';
+import { useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, ScrollView, Text, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import tw from 'twrnc';
-import { db } from '../../../../firebase/firebaseConfig';
-import { doc, runTransaction, collection, increment, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '../../../../context/AuthContext';
+import { db } from '../../../../firebase/firebaseConfig';
+import { notifyUser } from '../../../../utils/notifications'; // Import Notification Helper
 
 export default function TeamRegistrationScreen() {
   const { tournamentId } = useLocalSearchParams();
@@ -13,8 +14,8 @@ export default function TeamRegistrationScreen() {
   const router = useRouter();
 
   const [teamName, setTeamName] = useState("");
-  const [captainName, setCaptainName] = useState(userData?.name || ""); // Auto-fill
-  const [captainPhone, setCaptainPhone] = useState(userData?.mobileNumber || ""); // Auto-fill
+  const [captainName, setCaptainName] = useState(userData?.name || ""); 
+  const [captainPhone, setCaptainPhone] = useState(userData?.mobileNumber || ""); 
   const [isRegistering, setIsRegistering] = useState(false);
 
   const handleRegister = async () => {
@@ -32,8 +33,11 @@ export default function TeamRegistrationScreen() {
     const tournamentRef = doc(db, 'tournaments', tournamentId);
     const newRegistrationRef = doc(collection(db, 'tournamentRegistrations'));
 
+    // Variables to store data for notification outside transaction
+    let ownerIdToNotify = null;
+    let tournamentNameToNotify = "";
+
     try {
-      // Hum Transaction istemal karein ge (Team limit check karne ke liye)
       await runTransaction(db, async (transaction) => {
         const tournamentDoc = await transaction.get(tournamentRef);
         if (!tournamentDoc.exists()) {
@@ -42,37 +46,49 @@ export default function TeamRegistrationScreen() {
 
         const tournament = tournamentDoc.data();
 
-        // 1. Check karein ke teams full to nahi
+        // Check Limit
         if (tournament.teamLimit && tournament.registeredTeamCount >= tournament.teamLimit) {
           throw new Error("Sorry, this tournament is already full.");
         }
 
-        // 2. Nayi registration document banayein
+        // Store data for later notification
+        ownerIdToNotify = tournament.ownerId;
+        tournamentNameToNotify = tournament.tournamentName;
+
+        // Create Registration
         transaction.set(newRegistrationRef, {
           tournamentId: tournamentId,
           ownerId: tournament.ownerId,
           teamName: teamName,
           captainName: captainName,
           captainPhone: captainPhone,
-          playerId: user.uid, // Player jisne register kiya
+          playerId: user.uid, // Note: We use 'playerId' here
           status: "paid",
           registeredAt: serverTimestamp(),
         });
 
-        // 3. Tournament mein count barhayein
+        // Update Count
         transaction.update(tournamentRef, {
           registeredTeamCount: increment(1)
         });
       });
 
-      // (Simulated Payment Delay)
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // --- 🔥 NOTIFY OWNER: New Team Registered ---
+      if (ownerIdToNotify) {
+          await notifyUser(
+              ownerIdToNotify,
+              "New Team Registered 🏏",
+              `${teamName} has registered for ${tournamentNameToNotify}.`,
+              "info",
+              { url: `/(owner)/tournaments/details/${tournamentId}` }
+          );
+      }
 
       Alert.alert(
         "Registration Successful!",
         "Your team is registered. The owner will contact you."
       );
-      router.replace(`/home/tournamentDetails/${tournamentId}`); // Details screen par wapas bhej dein
+      router.replace(`/home/tournamentDetails/${tournamentId}`); 
 
     } catch (error) {
       console.error("Registration Transaction Failed: ", error);

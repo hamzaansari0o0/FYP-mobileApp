@@ -1,11 +1,13 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, FlatList, Pressable, Alert, ActivityIndicator } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { collection, doc, getDocs, query, updateDoc, where } from 'firebase/firestore';
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
 import { db } from '../../../firebase/firebaseConfig';
-import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
-import { useFocusEffect, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+// 🔥 Notification Helper Import
+import { notifyUser } from '../../../utils/notifications';
 
 const AdminHeader = ({ title, onBack }) => (
   <View style={tw`flex-row items-center mb-5`}>
@@ -18,10 +20,9 @@ const AdminHeader = ({ title, onBack }) => (
 
 const ArenaManageCard = ({ arena, onDisable, onEnable, onViewCourts }) => {
   const isEnabled = arena.status !== 'disabled';
-  
   return (
     <Pressable 
-      onPress={() => onViewCourts(arena.id)} // Pure card par click se courts khulein
+      onPress={() => onViewCourts(arena.id)} 
       style={tw`bg-white p-4 rounded-lg shadow-md mb-4 border border-gray-100`}
     >
       <View style={tw`flex-row justify-between items-start`}>
@@ -32,15 +33,13 @@ const ArenaManageCard = ({ arena, onDisable, onEnable, onViewCourts }) => {
         </View>
         <Ionicons name="chevron-forward" size={24} color={tw.color('gray-400')} />
       </View>
-      
       <View style={tw`flex-row justify-between items-center mt-4 pt-3 border-t border-gray-100`}>
         <Text style={tw`font-bold ${isEnabled ? 'text-green-600' : 'text-red-600'}`}>
             Status: {arena.status ? arena.status.toUpperCase() : 'UNKNOWN'}
         </Text>
-
         <Pressable
           style={tw`py-2 px-4 rounded-lg ${isEnabled ? 'bg-red-100' : 'bg-green-100'}`}
-          onPress={() => isEnabled ? onDisable(arena.id) : onEnable(arena.id)}
+          onPress={() => isEnabled ? onDisable(arena) : onEnable(arena)}
         >
           <Text style={tw`font-bold ${isEnabled ? 'text-red-700' : 'text-green-700'}`}>
             {isEnabled ? 'Disable Arena' : 'Enable Arena'}
@@ -56,59 +55,59 @@ export default function ManageArenasScreen() {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchArenas();
-    }, [])
-  );
+  useFocusEffect(useCallback(() => { fetchArenas(); }, []));
 
   const fetchArenas = async () => {
     setLoading(true);
     try {
-      const q = query(
-        collection(db, 'users'),
-        where('role', '==', 'owner'),
-        // Hum sirf Approved ya Disabled dikhana chahte hain (Pending nahi)
-        where('status', 'in', ['approved', 'disabled']) 
-      );
+      const q = query(collection(db, 'users'), where('role', '==', 'owner'), where('status', 'in', ['approved', 'disabled']));
       const querySnapshot = await getDocs(q);
-      // Filter out those without arenaName
-      const arenasList = querySnapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() }))
-        .filter(a => a.arenaName); 
-        
+      const arenasList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).filter(a => a.arenaName); 
       setArenas(arenasList);
-    } catch (error) {
-      console.error("Error fetching arenas: ", error);
-    } finally {
-      setLoading(false);
-    }
+    } catch (error) { console.error(error); } finally { setLoading(false); }
   };
 
-  const handleDisable = async (id) => {
+  const handleDisable = async (arena) => {
     Alert.alert(
         "Disable Arena?",
-        "This will hide the arena and ALL its courts from players.",
+        `This will hide '${arena.arenaName}' and ALL its courts from players.`,
         [
             { text: "Cancel", style: "cancel" },
             { 
                 text: "Disable", style: "destructive", 
                 onPress: async () => {
-                    await updateDoc(doc(db, 'users', id), { status: 'disabled' });
-                    setArenas(prev => prev.map(a => a.id === id ? { ...a, status: 'disabled' } : a));
+                    await updateDoc(doc(db, 'users', arena.id), { status: 'disabled' });
+                    
+                    // 🔥 Notify Owner
+                    await notifyUser(
+                      arena.id, 
+                      "Arena Disabled 🛡️", 
+                      `Admin has disabled your arena '${arena.arenaName}'. Your courts are now hidden from players.`,
+                      "alert"
+                    );
+
+                    setArenas(prev => prev.map(a => a.id === arena.id ? { ...a, status: 'disabled' } : a));
                 }
             }
         ]
     );
   };
 
-  const handleEnable = async (id) => {
-    await updateDoc(doc(db, 'users', id), { status: 'approved' });
-    setArenas(prev => prev.map(a => a.id === id ? { ...a, status: 'approved' } : a));
+  const handleEnable = async (arena) => {
+    await updateDoc(doc(db, 'users', arena.id), { status: 'approved' });
+    
+    // 🔥 Notify Owner
+    await notifyUser(
+      arena.id, 
+      "Arena Activated! ✅", 
+      `Good news! Your arena '${arena.arenaName}' is now active and visible to players.`,
+      "booking"
+    );
+
+    setArenas(prev => prev.map(a => a.id === arena.id ? { ...a, status: 'approved' } : a));
   };
 
   const handleViewCourts = (ownerId) => {
-    // Navigate to next level
     router.push(`/(admin)/dashboard/arenaCourts/${ownerId}`);
   };
 
@@ -116,7 +115,6 @@ export default function ManageArenasScreen() {
     <SafeAreaView style={tw`flex-1 bg-gray-100`}>
       <View style={tw`p-5`}>
         <AdminHeader title="Manage Arenas" onBack={() => router.back()} />
-        
         {loading ? (
           <ActivityIndicator size="large" color={tw.color('purple-600')} />
         ) : (
@@ -124,12 +122,7 @@ export default function ManageArenasScreen() {
             data={arenas}
             keyExtractor={item => item.id}
             renderItem={({ item }) => (
-              <ArenaManageCard 
-                arena={item} 
-                onDisable={handleDisable} 
-                onEnable={handleEnable} 
-                onViewCourts={handleViewCourts}
-              />
+              <ArenaManageCard arena={item} onDisable={handleDisable} onEnable={handleEnable} onViewCourts={handleViewCourts} />
             )}
             ListEmptyComponent={<Text>No active arenas found.</Text>}
           />

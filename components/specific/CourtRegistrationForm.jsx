@@ -1,21 +1,28 @@
-import React, { useState } from 'react';
+import * as ImagePicker from 'expo-image-picker';
+import { addDoc, collection, doc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
+import { useEffect, useState } from 'react';
 import {
-  View, Text, TextInput, Pressable, Alert,
-  ActivityIndicator, ScrollView, Image
+  ActivityIndicator,
+  Alert,
+  Image,
+  Pressable,
+  ScrollView,
+  Text, TextInput,
+  View
 } from 'react-native';
 import tw from 'twrnc';
 import { db, storage } from '../../firebase/firebaseConfig';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import * as ImagePicker from 'expo-image-picker';
 
 export default function CourtRegistrationForm({ user, onRegistrationSuccess }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
 
+  // Arena data hold karne ke liye
+  const [arenaData, setArenaData] = useState(null);
+
   const [formData, setFormData] = useState({
     courtName: '',
-    address: '', // Default: Arena Address (Agar same hai)
     pricePerHour: '',
     bankName: '',
     accountNumber: '',
@@ -24,11 +31,26 @@ export default function CourtRegistrationForm({ user, onRegistrationSuccess }) {
   
   const [image, setImage] = useState(null);
 
+  // --- 🔥 Fetch Arena Data (Address + Location) on Mount ---
+  useEffect(() => {
+    const fetchArenaData = async () => {
+        try {
+            const userDoc = await getDoc(doc(db, "users", user.uid));
+            if (userDoc.exists()) {
+                setArenaData(userDoc.data());
+            }
+        } catch (error) {
+            console.error("Error fetching arena info:", error);
+        }
+    };
+    fetchArenaData();
+  }, [user]);
+
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  // --- Image Picker ---
+  // Image Picker
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
@@ -37,7 +59,7 @@ export default function CourtRegistrationForm({ user, onRegistrationSuccess }) {
     }
 
     let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'], // Updated
+      mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [4, 3],
       quality: 0.7,
@@ -46,14 +68,14 @@ export default function CourtRegistrationForm({ user, onRegistrationSuccess }) {
     if (!result.canceled) {
       const asset = result.assets[0];
       if (asset.fileSize && asset.fileSize > 5 * 1024 * 1024) {
-        Alert.alert('Image Too Large', 'Please select an image smaller than 5MB.');
+        Alert.alert('Image Too Large', 'Max 5MB allowed.');
         return;
       }
       setImage(asset.uri);
     }
   };
   
-  // --- Upload Logic (Reliable XHR) ---
+  // Upload Logic
   const uploadImageAsync = async (uri) => {
     const blob = await new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
@@ -64,12 +86,10 @@ export default function CourtRegistrationForm({ user, onRegistrationSuccess }) {
       xhr.send(null);
     });
     
-    // courts/USER_ID/court_TIMESTAMP
     const fileRef = ref(storage, `courts/${user.uid}/court_${Date.now()}`);
     
     return new Promise((resolve, reject) => {
       const uploadTask = uploadBytesResumable(fileRef, blob);
-
       uploadTask.on('state_changed', 
         (snapshot) => {
           const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
@@ -89,7 +109,6 @@ export default function CourtRegistrationForm({ user, onRegistrationSuccess }) {
   };
 
   const handleRegisterCourt = async () => {
-    // 1. Validation
     if (!formData.courtName || !formData.pricePerHour || !formData.bankName || !formData.accountNumber) {
       Alert.alert('Missing Fields', 'Please fill all required fields.');
       return;
@@ -99,43 +118,36 @@ export default function CourtRegistrationForm({ user, onRegistrationSuccess }) {
       Alert.alert('Missing Image', 'Please upload a court picture.');
       return;
     }
-    
-    const price = parseFloat(formData.pricePerHour);
-    if (isNaN(price) || price <= 0) {
-        Alert.alert("Invalid Price", "Price must be a valid number.");
-        return;
-    }
 
     setIsSubmitting(true);
     setUploadProgress(0);
 
     try {
-      // Step 1: Upload Image
       const courtImageURL = await uploadImageAsync(image);
-
       setUploadProgress(100); 
       
-      // Step 2: Save to Firestore
       const newCourtData = {
         ownerId: user.uid,
         courtName: formData.courtName.trim(),
-        address: formData.address.trim() || "Same as Arena", // Optional if inside arena
-        pricePerHour: price,
+        pricePerHour: parseFloat(formData.pricePerHour),
         
-        // Defaults (Baad mein update ho sakte hain)
+        // 🔥 INHERIT LOCATION FROM ARENA
+        // Agar arena ke paas address hai to wo lelo, nahi to default
+        address: arenaData?.arenaAddress || "Arena Address", 
+        // Agar arena ke paas lat/lng hai to wo lelo (CRITICAL for Player Maps)
+        location: arenaData?.location || null,
+
         openTime: "00:00",
         closeTime: "23:00",
-        
         courtImageURL: courtImageURL,
-        status: 'pending', // IMPORTANT: Pending for Approval
+        status: 'pending', 
         
         ownerBankDetails: {
           bankName: formData.bankName.trim(),
           accountNumber: formData.accountNumber.trim(),
           jazzCash: formData.jazzCash.trim() || '',
         },
-        documentImages: [], // Abhi court ke liye alag docs nahi maang rahe
-        location: null,
+        documentImages: [], 
         createdAt: serverTimestamp(),
       };
 
@@ -157,12 +169,7 @@ export default function CourtRegistrationForm({ user, onRegistrationSuccess }) {
   };
   
   const getButtonText = () => {
-    if (isSubmitting) {
-      if (uploadProgress > 0 && uploadProgress < 100) {
-        return `Uploading... ${uploadProgress}%`;
-      }
-      return 'Submitting...';
-    }
+    if (isSubmitting) return uploadProgress > 0 ? `Uploading... ${uploadProgress}%` : 'Submitting...';
     return 'Submit Court for Approval';
   };
 
@@ -170,9 +177,20 @@ export default function CourtRegistrationForm({ user, onRegistrationSuccess }) {
     <ScrollView contentContainerStyle={tw`p-6 pb-20`}>
       <Text style={tw`text-3xl font-bold text-gray-800 mb-2`}>Add New Court</Text>
       <Text style={tw`text-sm text-gray-500 mb-6`}>
-        Add details for a specific court (e.g. "Futsal Court 1"). This will need admin approval.
+        Add details for a specific court. This will inherit location from your Arena.
       </Text>
       
+      {/* Location Info Box (Auto-filled) */}
+      <View style={tw`bg-blue-50 p-4 rounded-lg mb-6 border border-blue-100`}>
+        <Text style={tw`text-blue-800 font-bold mb-1`}>📍 Location Info</Text>
+        <Text style={tw`text-gray-700 text-sm`}>
+            {arenaData?.arenaAddress ? arenaData.arenaAddress : "Loading Arena Location..."}
+        </Text>
+        <Text style={tw`text-xs text-blue-500 mt-2`}>
+            (This court will be registered at your Arena's location automatically.)
+        </Text>
+      </View>
+
       {/* Court Name */}
       <Text style={tw`text-lg font-semibold mb-2 text-gray-700`}>Court Name</Text>
       <TextInput
@@ -180,15 +198,6 @@ export default function CourtRegistrationForm({ user, onRegistrationSuccess }) {
         placeholder="e.g., Futsal Ground A"
         value={formData.courtName}
         onChangeText={(val) => handleInputChange('courtName', val)}
-      />
-      
-      {/* Address (Optional if same as Arena) */}
-      <Text style={tw`text-lg font-semibold mb-2 text-gray-700`}>Address (Optional)</Text>
-      <TextInput
-        style={tw`border border-gray-300 p-4 rounded-lg mb-4 text-base bg-white`}
-        placeholder="Leave empty if same as Arena"
-        value={formData.address}
-        onChangeText={(val) => handleInputChange('address', val)}
       />
       
       {/* Price */}
@@ -221,10 +230,10 @@ export default function CourtRegistrationForm({ user, onRegistrationSuccess }) {
       )}
 
       {/* Bank Details Header */}
-      <View style={tw`bg-blue-50 p-4 rounded-lg mb-4 border border-blue-100`}>
-        <Text style={tw`text-lg font-bold text-blue-800 mb-2`}>Bank Details for Payouts</Text>
-        <Text style={tw`text-xs text-blue-600`}>
-           This account will receive payments for bookings of this court.
+      <View style={tw`bg-gray-100 p-4 rounded-lg mb-4 border border-gray-200`}>
+        <Text style={tw`text-lg font-bold text-gray-800 mb-2`}>Bank Details for Payouts</Text>
+        <Text style={tw`text-xs text-gray-600`}>
+           Payments will be sent to this account.
         </Text>
       </View>
       

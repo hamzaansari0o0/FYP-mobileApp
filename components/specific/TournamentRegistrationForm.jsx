@@ -1,17 +1,21 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View, Text, TextInput, Pressable, Alert,
-  ActivityIndicator, ScrollView
-} from 'react-native';
-import tw from 'twrnc';
-import { db } from '../../firebase/firebaseConfig';
-import { collection, addDoc, serverTimestamp, Timestamp, doc, updateDoc } from 'firebase/firestore'; 
-import { useAuth } from '../../context/AuthContext';
-import DateTimePickerModal from "react-native-modal-datetime-picker";
+import { addDoc, collection, doc, serverTimestamp, Timestamp, updateDoc } from 'firebase/firestore';
 import moment from 'moment';
+import { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  Text, TextInput,
+  View
+} from 'react-native';
 import DropDownPicker from 'react-native-dropdown-picker';
+import DateTimePickerModal from "react-native-modal-datetime-picker";
+import tw from 'twrnc';
+import { useAuth } from '../../context/AuthContext';
+import { db } from '../../firebase/firebaseConfig';
 
-// Helper components (updated)
+// Helper components
 const FormInput = ({ label, value, onChange, placeholder, keyboardType = 'default', disabled = false }) => (
   <View style={tw`mb-4`}>
     <Text style={tw`text-base font-semibold mb-2 text-gray-700`}>{label}</Text>
@@ -24,10 +28,11 @@ const FormInput = ({ label, value, onChange, placeholder, keyboardType = 'defaul
       value={value}
       onChangeText={onChange}
       keyboardType={keyboardType}
-      editable={!disabled} // <-- Disable karein
+      editable={!disabled} 
     />
   </View>
 );
+
 const DateInput = ({ label, value, onPress, disabled = false }) => (
   <View style={tw`mb-4`}>
     <Text style={tw`text-base font-semibold mb-2 text-gray-700`}>{label}</Text>
@@ -59,9 +64,9 @@ const padelSizes = [
   { label: '1 vs 1', value: '1v1' },
   { label: '2 vs 2', value: '2v2' },
 ];
-const cricketSizes = futsalSizes; // Futsal jaisa
+const cricketSizes = futsalSizes; 
 
-// Main Form Component (Updated)
+// Main Form Component
 export default function TournamentRegistrationForm({ 
   onSuccess, 
   isEditMode = false, 
@@ -70,7 +75,7 @@ export default function TournamentRegistrationForm({
   const { user, userData } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Form fields ko initialData se set karein
+  // Form fields
   const [formData, setFormData] = useState({
     tournamentName: initialData?.tournamentName || '',
     gameType: initialData?.gameType || 'futsal',
@@ -82,7 +87,7 @@ export default function TournamentRegistrationForm({
     rules: initialData?.rules || '',
   });
 
-  // Date states ko initialData se set karein
+  // Date states
   const [startDate, setStartDate] = useState(initialData?.startDate?.toDate() || moment().startOf('day').toDate());
   const [endDate, setEndDate] = useState(initialData?.endDate?.toDate() || moment().add(2, 'days').endOf('day').toDate());
   const [regDeadline, setRegDeadline] = useState(initialData?.registrationDeadline?.toDate() || moment().add(1, 'day').endOf('day').toDate());
@@ -140,7 +145,7 @@ export default function TournamentRegistrationForm({
     hideDatePicker();
   };
   
-  // Submit Logic (Create + Edit)
+  // Submit Logic
   const handleSubmit = async () => {
     if (!formData.tournamentName || !formData.entryFee || !formData.prizeMoney) {
       Alert.alert('Missing Fields', 'Please fill all required fields.'); return;
@@ -149,13 +154,10 @@ export default function TournamentRegistrationForm({
     
     // Data object banayein
     const tournamentData = {
-      // (Fields jo edit nahi ho sakti)
       tournamentName: formData.tournamentName,
       gameType: formData.gameType,
       entryFee: parseInt(formData.entryFee, 10),
       prizeMoney: parseInt(formData.prizeMoney, 10),
-      
-      // (Fields jo edit ho sakti hain)
       teamSize: formData.teamSize,
       format: formData.format,
       teamLimit: formData.teamLimit === 'unlimited' ? null : parseInt(formData.teamLimit, 10),
@@ -166,8 +168,11 @@ export default function TournamentRegistrationForm({
     };
 
     try {
+      let resultId;
+
       if (isEditMode) {
         // --- EDIT MODE ---
+        resultId = initialData.id;
         const tourRef = doc(db, 'tournaments', initialData.id);
         await updateDoc(tourRef, tournamentData);
         Alert.alert('Success!', 'Tournament details updated.');
@@ -176,17 +181,21 @@ export default function TournamentRegistrationForm({
         const docData = {
           ...tournamentData,
           ownerId: user.uid,
-          arenaName: userData.arenaName, 
+          arenaName: userData?.arenaName || 'Unknown Arena', 
           arenaId: user.uid, 
           status: 'registration_open',
           registeredTeamCount: 0,
           createdAt: serverTimestamp(),
         };
-        await addDoc(collection(db, 'tournaments'), docData);
+        const docRef = await addDoc(collection(db, 'tournaments'), docData);
+        resultId = docRef.id;
         Alert.alert('Success!', 'Your tournament is now live.');
       }
       
-      if (onSuccess) onSuccess(); // Parent ko success batayein
+      // 🔥 FIX: Ab hum ID aur Data dono wapas bhej rahe hain
+      if (onSuccess) {
+        onSuccess(resultId, tournamentData);
+      }
 
     } catch (error) {
       console.error('Error saving tournament: ', error);
@@ -199,13 +208,15 @@ export default function TournamentRegistrationForm({
   return (
     <ScrollView contentContainerStyle={tw`p-5`} nestedScrollEnabled={true}>
       
-      {/* --- Fields (Jo edit nahi ho sakti) --- */}
+      {/* Name */}
       <FormInput
         label="Tournament Name"
         value={formData.tournamentName}
         onChange={(val) => handleInputChange('tournamentName', val)}
-        disabled={isEditMode} // <-- Disable
+        disabled={isEditMode} 
       />
+
+      {/* Game Type */}
       <View style={tw`mb-4 z-50`}>
         <Text style={tw`text-base font-semibold mb-2 text-gray-700`}>Game Type</Text>
         <DropDownPicker
@@ -216,25 +227,28 @@ export default function TournamentRegistrationForm({
           setValue={(callback) => handleInputChange('gameType', callback(formData.gameType))}
           setItems={setGameTypeItems}
           listMode="SCROLLVIEW"
-          disabled={isEditMode} // <-- Disable
+          disabled={isEditMode} 
+          style={tw`border-gray-300`}
+          textStyle={tw`text-base`}
         />
       </View>
+
       <FormInput
         label="Entry Fee (PKR)"
         value={formData.entryFee}
         onChange={(val) => handleInputChange('entryFee', val)}
         keyboardType="numeric"
-        disabled={isEditMode} // <-- Disable
+        disabled={isEditMode} 
       />
       <FormInput
         label="Prize Money (PKR)"
         value={formData.prizeMoney}
         onChange={(val) => handleInputChange('prizeMoney', val)}
         keyboardType="numeric"
-        disabled={isEditMode} // <-- Disable
+        disabled={isEditMode} 
       />
 
-      {/* --- Fields (Jo edit ho sakti hain) --- */}
+      {/* Team Size */}
       <View style={tw`mb-4 z-40`}>
         <Text style={tw`text-base font-semibold mb-2 text-gray-700`}>Team Size</Text>
         <DropDownPicker
@@ -245,8 +259,12 @@ export default function TournamentRegistrationForm({
           setValue={(callback) => handleInputChange('teamSize', callback(formData.teamSize))}
           setItems={setTeamSizeItems}
           listMode="SCROLLVIEW"
+          style={tw`border-gray-300`}
+          textStyle={tw`text-base`}
         />
       </View>
+
+      {/* Format */}
       <View style={tw`mb-4 z-30`}>
         <Text style={tw`text-base font-semibold mb-2 text-gray-700`}>Format</Text>
         <DropDownPicker
@@ -257,8 +275,12 @@ export default function TournamentRegistrationForm({
           setValue={(callback) => handleInputChange('format', callback(formData.format))}
           setItems={setFormatItems}
           listMode="SCROLLVIEW"
+          style={tw`border-gray-300`}
+          textStyle={tw`text-base`}
         />
       </View>
+
+      {/* Team Limit */}
       <View style={tw`mb-4 z-20`}>
         <Text style={tw`text-base font-semibold mb-2 text-gray-700`}>Team Limit</Text>
         <DropDownPicker
@@ -269,8 +291,11 @@ export default function TournamentRegistrationForm({
           setValue={(callback) => handleInputChange('teamLimit', callback(formData.teamLimit))}
           setItems={setTeamLimitItems}
           listMode="SCROLLVIEW"
+          style={tw`border-gray-300`}
+          textStyle={tw`text-base`}
         />
       </View>
+
       <DateInput 
         label="Registration Deadline" 
         value={regDeadline} 
@@ -293,7 +318,7 @@ export default function TournamentRegistrationForm({
       />
       
       <Pressable
-        style={tw.style(`bg-green-600 py-4 rounded-lg shadow-md mt-4`, isSubmitting && `bg-green-400`)}
+        style={tw.style(`bg-green-600 py-4 rounded-lg shadow-md mt-4 mb-10`, isSubmitting && `bg-green-400`)}
         onPress={handleSubmit}
         disabled={isSubmitting}
       >

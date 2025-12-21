@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ActivityIndicator, Alert, Text, View } from 'react-native';
 import tw from 'twrnc';
-import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
-import TournamentRegistrationForm from '../../../../components/specific/TournamentRegistrationForm'; 
+import TournamentRegistrationForm from '../../../../components/specific/TournamentRegistrationForm';
 import { db } from '../../../../firebase/firebaseConfig';
-import { doc, getDoc } from 'firebase/firestore';
+import { notifyAllPlayers, notifyUser } from '../../../../utils/notifications'; // Added notifyAllPlayers
 
 export default function EditTournamentScreen() {
   const router = useRouter();
@@ -39,17 +40,82 @@ export default function EditTournamentScreen() {
     fetchTournament();
   }, [tournamentId]);
 
-  // Edit karne ke baad wapas Manage screen par
-  const handleSuccess = () => {
+  // Edit karne ke baad notification bhejein
+  const handleSuccess = async (newId, updatedData) => {
+    const tourName = updatedData?.tournamentName || initialData?.tournamentName || "Tournament";
+    console.log(`📝 Tournament Updated: ${tourName} (ID: ${tournamentId})`);
+
+    // Check if Schedule is generated (Status is usually 'live' or 'completed')
+    const isScheduleGenerated = initialData?.status === 'live' || initialData?.status === 'completed';
+
+    if (!isScheduleGenerated) {
+        // --- CASE 1: Schedule NOT generated (Registration Phase) -> Broadcast to ALL Players ---
+        console.log("ℹ️ Schedule not generated yet. Broadcasting update to all players.");
+        try {
+            await notifyAllPlayers(
+                "Tournament Update 📢",
+                `Details for '${tourName}' have been updated. Check the latest info!`,
+                { url: `/(player)/tournaments` }
+            );
+            console.log("✅ Broadcast sent to all players.");
+        } catch (error) {
+            console.error("❌ Error broadcasting update:", error);
+        }
+    } else {
+        // --- CASE 2: Schedule IS Generated -> Notify Registered Teams Only ---
+        console.log("ℹ️ Schedule exists. Notifying registered teams only.");
+        try {
+            const q = query(
+                collection(db, 'tournamentRegistrations'), 
+                where('tournamentId', '==', tournamentId)
+            );
+            const snapshot = await getDocs(q);
+            
+            console.log(`🔎 Found ${snapshot.size} registered teams for notification.`);
+
+            if (!snapshot.empty) {
+                const notifications = snapshot.docs.map(async (docSnap) => {
+                    const data = docSnap.data();
+                    // Captain ID ya User ID uthayein
+                    const targetId = data.captainId || data.userId || data.playerId; 
+                    
+                    if (targetId) {
+                        await notifyUser(
+                            targetId,
+                            "Tournament Update 📢",
+                            `Details for '${tourName}' have been updated. Check the schedule/rules.`,
+                            "info",
+                            { url: `/(player)/tournaments` }
+                        );
+                    }
+                });
+                await Promise.all(notifications);
+                console.log("✅ Targeted updates sent to registered teams.");
+            } else {
+                console.log("ℹ️ No registered teams to notify.");
+            }
+        } catch (error) {
+            console.error("❌ Error notifying registered players:", error);
+        }
+    }
+
     router.back(); 
   };
 
   if (loading) {
-    return <SafeAreaView style={tw`flex-1 justify-center`}><ActivityIndicator size="large" /></SafeAreaView>;
+    return (
+        <SafeAreaView style={tw`flex-1 justify-center items-center bg-gray-100`}>
+            <ActivityIndicator size="large" color={tw.color('blue-600')} />
+        </SafeAreaView>
+    );
   }
 
   if (!initialData) {
-    return <SafeAreaView><Text style={tw`text-center mt-20`}>No data.</Text></SafeAreaView>;
+    return (
+        <SafeAreaView style={tw`flex-1 justify-center items-center bg-gray-100`}>
+            <Text style={tw`text-gray-500`}>No data found.</Text>
+        </SafeAreaView>
+    );
   }
 
   return (

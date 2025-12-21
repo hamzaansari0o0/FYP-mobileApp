@@ -3,6 +3,7 @@ import { useLocalSearchParams, useNavigation } from 'expo-router';
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   onSnapshot,
   orderBy,
@@ -18,21 +19,65 @@ import { ActivityIndicator, Alert, Platform, Pressable } from 'react-native';
 import { Bubble, GiftedChat } from 'react-native-gifted-chat';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
-import { useAuth } from '../../../context/AuthContext';
-import { db } from '../../../firebase/firebaseConfig';
-
 import MatchChallengeModal from '../../../components/specific/chat/MatchChallengeModal';
 import MatchRequestBubble from '../../../components/specific/chat/MatchRequestBubble';
+import { useAuth } from '../../../context/AuthContext';
+import { db } from '../../../firebase/firebaseConfig';
+import { notifyUser, sendPushNotification } from '../../../utils/notifications'; // Updated Import
 
 export default function ChatRoom() {
   const navigation = useNavigation();
-  const { chatId, receiverName, receiverId } = useLocalSearchParams();
+  const { chatId, receiverName: paramName, receiverId: paramId } = useLocalSearchParams();
   const { user, userData, loading: authLoading } = useAuth(); 
   
+  const [receiverId, setReceiverId] = useState(paramId);
+  const [receiverName, setReceiverName] = useState(paramName);
+  const [receiverToken, setReceiverToken] = useState(null); // Store Token for fast chat push
+
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true); 
   const [modalVisible, setModalVisible] = useState(false);
 
+  // 1. Fetch Chat Metadata & Receiver Token
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchChatData = async () => {
+      let targetId = receiverId;
+      let targetName = receiverName;
+
+      // If params missing (e.g. opened via notification), fetch from Firestore
+      if (!targetId || !targetName) {
+        try {
+          const chatDoc = await getDoc(doc(db, 'chats', chatId));
+          if (chatDoc.exists()) {
+            const data = chatDoc.data();
+            const otherUser = data.usersData?.find(u => u.id !== user.uid);
+            if (otherUser) {
+              targetId = otherUser.id;
+              targetName = otherUser.name;
+              setReceiverId(targetId);
+              setReceiverName(targetName);
+            }
+          }
+        } catch (error) {
+          console.error("Error fetching chat metadata:", error);
+        }
+      }
+
+      // Fetch Receiver's Push Token (One time fetch for efficiency)
+      if (targetId) {
+        const userDoc = await getDoc(doc(db, 'users', targetId));
+        if (userDoc.exists()) {
+          setReceiverToken(userDoc.data().pushToken);
+        }
+      }
+    };
+
+    fetchChatData();
+  }, [chatId, receiverId, receiverName, user]);
+
+  // Update Header Title dynamically
   useLayoutEffect(() => {
     navigation.setOptions({
       title: receiverName || 'Chat',
@@ -44,6 +89,7 @@ export default function ChatRoom() {
     });
   }, [navigation, receiverName]);
 
+  // Listen to Messages
   useEffect(() => {
     if (!user || authLoading) return;
     setLoading(true);
@@ -69,6 +115,8 @@ export default function ChatRoom() {
     return () => unsubscribe();
   }, [chatId, user, authLoading]); 
 
+  // --- ACTIONS ---
+
   const onChallengeSubmit = (details) => {
     setModalVisible(false);
     sendSpecialMessage('match_request', null, details);
@@ -79,6 +127,16 @@ export default function ChatRoom() {
 
     const matchId = `match_${Date.now()}_${user.uid}`;
     
+    let notificationBody = text;
+    let notificationTitle = userData.name || "New Message";
+    let notificationType = 'info';
+
+    if (type === 'match_request') {
+        notificationTitle = "Match Challenge! 🏆";
+        notificationBody = `Challenged you to a match at ${details?.arenaName}!`;
+        notificationType = 'alert';
+    }
+
     const messageData = {
       _id: matchId,
       createdAt: serverTimestamp(),
@@ -89,15 +147,12 @@ export default function ChatRoom() {
       text: type === 'match_request' ? "Match Challenge" : text,
       messageType: type, 
       status: type === 'match_request' ? 'pending' : null, 
-      
-      // Details Save with Address
       matchDetails: details ? {
         arenaName: details.arenaName,
         arenaAddress: details.arenaAddress || '', 
         courtName: details.courtName,
         matchDate: details.matchDate.toISOString()
       } : null,
-      
       acceptedBy: null,
       acceptedByName: null
     };
@@ -107,30 +162,57 @@ export default function ChatRoom() {
         text: type === 'match_request' ? '🏆 Match Challenge Sent' : messageData.text,
         createdAt: serverTimestamp(),
       },
-      users: [user.uid, receiverId],
-      usersData: [
-        { id: user.uid, name: userData.name || 'User' },
-        { id: receiverId, name: receiverName || 'User' }
-      ]
     };
+
+    if (receiverId) {
+        chatData.users = [user.uid, receiverId];
+        chatData.usersData = [
+            { id: user.uid, name: userData.name || 'User' },
+            { id: receiverId, name: receiverName || 'User' }
+        ];
+    }
 
     try {
       const chatRef = doc(db, 'chats', chatId);
       const messageRef = doc(db, 'chats', chatId, 'messages', matchId);
+      
       await setDoc(chatRef, chatData, { merge: true });
       await setDoc(messageRef, messageData);
+
+      // --- NOTIFICATION LOGIC ---
+      if (receiverId) {
+        if (type === 'match_request') {
+           // Important Event: Save to History + Push (Use notifyUser)
+           await notifyUser(
+             receiverId, 
+             notificationTitle, 
+             notificationBody, 
+             notificationType, 
+             { url: `/chat/${chatId}`, chatId: chatId }
+           );
+        } else {
+           // Normal Text: Just Push (No History) to avoid spam
+           if (receiverToken) {
+             await sendPushNotification(
+               receiverToken, 
+               userData.name, 
+               text, 
+               { url: `/chat/${chatId}`, chatId: chatId }
+             );
+           }
+        }
+      }
+
     } catch (error) {
-      console.error("Error:", error);
+      console.error("Error sending message:", error);
       Alert.alert("Error", "Could not send.");
     }
   };
 
-  // --- MAIN LOGIC: Accept Match & Save to Schedule ---
   const handleAcceptMatch = useCallback(async (messageId) => {
     try {
       const messageRef = doc(db, 'chats', chatId, 'messages', messageId);
 
-      // 1. Transaction to Update Chat Status
       await runTransaction(db, async (transaction) => {
         const messageDoc = await transaction.get(messageRef);
         if (!messageDoc.exists()) throw "Message not found.";
@@ -147,10 +229,8 @@ export default function ChatRoom() {
         });
       });
 
-      // 2. SAVE TO SCHEDULE ('matches' collection)
+      // Create Match Document
       const matchDocRef = doc(db, 'matches', messageId); 
-      
-      // Fetch message data specifically to copy details
       const msgSnap = await getDocs(query(collection(db, 'chats', chatId, 'messages'), where('_id', '==', messageId)));
       
       if (!msgSnap.empty) {
@@ -159,26 +239,30 @@ export default function ChatRoom() {
           await setDoc(matchDocRef, {
               matchId: messageId,
               chatId: chatId,
-              
-              // Players
               challengerId: msgData.user._id,
               challengerName: msgData.user.name,
               acceptorId: user.uid,
               acceptorName: userData.name,
               participants: [msgData.user._id, user.uid], 
-              
-              // Match Info
               arenaName: msgData.matchDetails.arenaName,
               arenaAddress: msgData.matchDetails.arenaAddress || '',
               courtName: msgData.matchDetails.courtName,
               matchDate: msgData.matchDetails.matchDate, 
-              
               status: 'scheduled',
               createdAt: serverTimestamp()
           });
+
+          // --- NOTIFICATION LOGIC (Acceptance) ---
+          // Notify the Challenger (Important Event -> History + Push)
+          await notifyUser(
+            msgData.user._id,
+            "Match Accepted! 🤝",
+            `${userData.name} accepted your challenge!`,
+            "booking", // Using 'booking' type so it shows green/prominent
+            { url: `/schedule` }
+          );
       }
 
-      // 3. Cleanup other requests
       cleanupOtherRequests(messageId);
       Alert.alert("Match Locked! 🔒", "Added to your schedule.");
 
@@ -206,7 +290,7 @@ export default function ChatRoom() {
 
   const onSend = useCallback((messages = []) => {
     sendSpecialMessage('text', messages[0].text);
-  }, [chatId, user, userData]); 
+  }, [chatId, user, userData, receiverId, receiverName, receiverToken]); // Added receiverToken dependency
 
   const renderBubble = (props) => {
     const { currentMessage } = props;
@@ -231,7 +315,8 @@ export default function ChatRoom() {
     );
   };
 
-  if (authLoading || loading) {
+  // --- FIX: Add !user check here ---
+  if (authLoading || loading || !user) {
     return (
       <SafeAreaView style={tw`flex-1 bg-white justify-center items-center`}>
           <ActivityIndicator size="large" color={tw.color('blue-600')} />
@@ -247,7 +332,7 @@ export default function ChatRoom() {
         showUserAvatar={false}
         onSend={messages => onSend(messages)}
         user={{
-          _id: user.uid, 
+          _id: user.uid, // This was crashing because user was null
           name: userData?.name || user.email, 
         }}
         renderBubble={renderBubble}

@@ -1,17 +1,33 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, ActivityIndicator, Alert, ImageBackground, StatusBar, Pressable } from 'react-native';
-import { SafeAreaView } from "react-native-safe-area-context";
-import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, ImageBackground, Linking, Platform, Pressable, StatusBar, Text, View } from 'react-native';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps'; // Added Map Imports
 import tw from 'twrnc';
-import { Ionicons } from '@expo/vector-icons';
 
 // Imports
-import { db } from '../../../../firebase/firebaseConfig'; 
-import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
-// Ensure this path is correct based on your project structure
-import CourtCard from '../../../../components/CourtCard'; 
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
+import CourtCard from '../../../../components/CourtCard';
+import { db } from '../../../../firebase/firebaseConfig';
 
-// --- Immersive Header ---
+// --- Helper: Open Google Maps App for Navigation ---
+const openMapsForDirections = (lat, lng, label) => {
+    const scheme = Platform.select({ ios: 'maps:0,0?q=', android: 'geo:0,0?q=' });
+    const latLng = `${lat},${lng}`;
+    const labelEncoded = encodeURIComponent(label);
+    
+    const url = Platform.select({
+        ios: `${scheme}${labelEncoded}@${latLng}`,
+        android: `${scheme}${latLng}(${labelEncoded})`
+    });
+
+    Linking.openURL(url).catch(err => {
+        // Fallback for web or if app not installed
+        Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`);
+    });
+};
+
+// --- Immersive Header with Map ---
 const ArenaHeader = ({ arena }) => {
   const router = useRouter();
   
@@ -20,24 +36,25 @@ const ArenaHeader = ({ arena }) => {
     ? { uri: arena.arenaImageUrl }
     : { uri: 'https://via.placeholder.com/600x400?text=Arena' }; 
 
+  // Location Safety Check
+  const location = arena.location || { latitude: 31.5204, longitude: 74.3587 }; // Default Lahore if missing
+
   return (
     <View style={tw`bg-white mb-4`}>
-      {/* Image Background */}
+      {/* 1. Top Image Section */}
       <View style={tw`h-72 w-full bg-gray-900 relative`}>
         <ImageBackground
           source={imageSource}
           resizeMode="cover"
           style={tw`flex-1`}
         >
-          {/* Gradient Overlay for Text Readability */}
           <View style={tw`absolute inset-0 bg-black/30`} />
-          {/* Simple dark overlay since native gradient might cause issues if package missing */}
           <View style={tw`absolute inset-0 bg-black/20`} /> 
           
           {/* Back Button */}
           <Pressable 
             onPress={() => router.back()} 
-            style={tw`absolute top-12 left-5 bg-white/20 p-2 rounded-full`}
+            style={tw`absolute top-12 left-5 bg-white/20 p-2 rounded-full z-10`}
           >
             <Ionicons name="arrow-back" size={24} color="white" />
           </Pressable>
@@ -67,7 +84,42 @@ const ArenaHeader = ({ arena }) => {
         </ImageBackground>
       </View>
 
-      <Text style={tw`text-xl font-bold text-gray-900 px-6 mt-6 mb-2`}>
+      {/* 2. Map & Directions Section */}
+      <View style={tw`px-6 mt-6`}>
+          <Text style={tw`text-lg font-bold text-gray-800 mb-3`}>Location & Directions</Text>
+          
+          <View style={tw`rounded-xl overflow-hidden border border-gray-200 shadow-sm bg-white`}>
+              {/* Map View */}
+              <MapView
+                  provider={PROVIDER_GOOGLE}
+                  style={tw`w-full h-48`}
+                  initialRegion={{
+                      latitude: location.latitude,
+                      longitude: location.longitude,
+                      latitudeDelta: 0.005,
+                      longitudeDelta: 0.005,
+                  }}
+                  scrollEnabled={false} // Disable scroll inside list to avoid conflict
+                  zoomEnabled={false}
+              >
+                  <Marker 
+                      coordinate={{ latitude: location.latitude, longitude: location.longitude }}
+                      title={arena.arenaName}
+                  />
+              </MapView>
+
+              {/* Get Directions Button */}
+              <Pressable 
+                  onPress={() => openMapsForDirections(location.latitude, location.longitude, arena.arenaName)}
+                  style={tw`flex-row items-center justify-center bg-blue-600 py-3`}
+              >
+                  <MaterialIcons name="directions" size={24} color="white" style={tw`mr-2`} />
+                  <Text style={tw`text-white font-bold text-base`}>Get Directions</Text>
+              </Pressable>
+          </View>
+      </View>
+
+      <Text style={tw`text-xl font-bold text-gray-900 px-6 mt-8 mb-2`}>
         Available Courts
       </Text>
     </View>
@@ -113,7 +165,6 @@ export default function OwnerDetailsScreen() {
 
       } catch (error) {
         console.error("Error fetching details: ", error);
-        // Alert removed to prevent loop on error, just log
       } finally {
         setLoading(false);
       }

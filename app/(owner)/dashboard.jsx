@@ -1,37 +1,37 @@
-import React, { useState, useCallback } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect, useRouter } from "expo-router";
 import {
-  View,
-  Text,
-  FlatList,
+  Timestamp,
+  collection,
+  doc,
+  getDocs,
+  onSnapshot,
+  orderBy,
+  query,
+  runTransaction,
+  where
+} from "firebase/firestore";
+import moment from "moment";
+import { useCallback, useEffect, useState } from "react";
+import {
   ActivityIndicator,
   Alert,
+  FlatList,
   Pressable,
+  Text,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import tw from "twrnc";
-import { db } from "../../firebase/firebaseConfig";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  orderBy,
-  doc,
-  runTransaction,
-  Timestamp,
-  // increment, // {/* === 1. REMOVED 'increment' (No longer needed) === */}
-} from "firebase/firestore";
 import { useAuth } from "../../context/AuthContext";
-import { useFocusEffect } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
-import moment from "moment";
+import { db } from "../../firebase/firebaseConfig";
+import { notifyUser } from "../../utils/notifications";
 
-// --- Owner ki booking card (UPDATED) ---
+// --- Owner ki booking card ---
 const OwnerBookingCard = ({ booking, onCancel, isCancelling }) => {
   const formattedTime = moment(booking.slotTime, "HH").format("h:00 A");
   const bookingStatus = booking.status || "upcoming";
 
-  // {/* === 2. ADDED Helper for masked refund account === */}
   const refundAccountDisplay = booking.playerRefundAccount
     ? `...${booking.playerRefundAccount.slice(-4)}`
     : "[No Account]";
@@ -91,7 +91,6 @@ const OwnerBookingCard = ({ booking, onCancel, isCancelling }) => {
         </Pressable>
       )}
 
-      {/* === 3. UPDATED Cancelled message (No more wallet) === */}
       {bookingStatus === "cancelled_by_owner" && (
         <Text style={tw`text-center text-sm text-red-500 mt-2`}>
           You cancelled. Player refund (simulated) to {refundAccountDisplay}.
@@ -103,10 +102,29 @@ const OwnerBookingCard = ({ booking, onCancel, isCancelling }) => {
 
 export default function OwnerDashboard() {
   const { user } = useAuth();
+  const router = useRouter();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [cancellingId, setCancellingId] = useState(null);
+  
+  // Notification Badge Logic
+  const [unreadCount, setUnreadCount] = useState(0);
 
+  // 1. Fetch Unread Notifications Count (Real-time)
+  useEffect(() => {
+    if (!user) return;
+    const q = query(
+        collection(db, 'notifications'), 
+        where('userId', '==', user.uid),
+        where('read', '==', false)
+    );
+    const unsubscribe = onSnapshot(q, (snap) => {
+        setUnreadCount(snap.size);
+    });
+    return () => unsubscribe();
+  }, [user]);
+
+  // 2. Fetch Bookings
   useFocusEffect(
     useCallback(() => {
       if (user) {
@@ -135,11 +153,6 @@ export default function OwnerDashboard() {
       setBookings(bookingsList);
     } catch (error) {
       console.error("Error fetching owner bookings:", error.message);
-      if (error.code === "failed-precondition") {
-        Alert.alert("Index Required", "Please check console for index link.");
-      } else {
-        Alert.alert("Error", "Could not fetch your bookings.");
-      }
     } finally {
       setLoading(false);
     }
@@ -147,7 +160,6 @@ export default function OwnerDashboard() {
 
   // --- Owner Cancellation Logic ---
   const handleOwnerCancel = (booking) => {
-    // {/* === 4. UPDATED Confirmation Alert (No more wallet) === */}
     const refundAccountDisplay = booking.playerRefundAccount
       ? `...${booking.playerRefundAccount.slice(-4)}`
       : "[No Account]";
@@ -166,47 +178,41 @@ export default function OwnerDashboard() {
     );
   };
 
-  // --- Transaction Logic ---
   const performOwnerCancellation = async (booking) => {
     setCancellingId(booking.id);
-
     const bookingRef = doc(db, "bookings", booking.id);
     const slotRef = doc(db, "court_slots", `${booking.courtId}_${booking.date}`);
-    // {/* === 5. REMOVED playerUserRef (No longer needed) === */}
-    // const playerUserRef = doc(db, 'users', booking.playerId);
-    const refundAmount = booking.amountPaid;
-
-    // {/* === 6. ADDED refundAccountDisplay for success alert === */}
     const refundAccountDisplay = booking.playerRefundAccount
       ? `...${booking.playerRefundAccount.slice(-4)}`
       : "[No Account]";
 
     try {
       await runTransaction(db, async (transaction) => {
-        // Step 1: Slot ko 'unavailable' karein
         const slotDoc = await transaction.get(slotRef);
         if (slotDoc.exists()) {
-          const slotsMap = slotDoc.data().slots;
-          slotsMap[booking.slotTime] = "unavailable"; // 'unavailable' for maintenance
+          const slotsMap = slotDoc.data().slots || {};
+          slotsMap[booking.slotTime] = "unavailable"; 
           transaction.update(slotRef, { slots: slotsMap });
         }
-
-        // Step 2: Booking status update
         transaction.update(bookingRef, {
           status: "cancelled_by_owner",
           cancellationReason: "Maintenance",
         });
-
-        // {/* === 7. REMOVED Step 3 (Player refund to wallet) === */}
-        // transaction.update(playerUserRef, {
-        //   walletCredit: increment(refundAmount),
-        // });
       });
 
-      // {/* === 8. UPDATED Success Alert (No more wallet) === */}
+      const notificationBody = `Your booking on ${booking.date} at ${booking.slotTime}:00 has been cancelled by the arena owner. Refund initiated.`;
+      
+      await notifyUser(
+        booking.playerId,
+        "Booking Cancelled ⚠️",
+        notificationBody,
+        "alert", 
+        { url: '/(player)/history' }
+      );
+
       Alert.alert(
         "Success",
-        `Booking cancelled. The slot is blocked and the player's (Simulated) refund to ${refundAccountDisplay} has been processed.`
+        `Booking cancelled. Refund to ${refundAccountDisplay} processed.`
       );
       fetchOwnerBookings();
     } catch (error) {
@@ -219,10 +225,31 @@ export default function OwnerDashboard() {
 
   return (
     <SafeAreaView style={tw`flex-1 bg-gray-100`}>
-      <View style={tw`p-5`}>
-        <Text style={tw`text-3xl font-bold text-green-800 mb-5`}>
-          Upcoming Bookings
-        </Text>
+        {/* --- CUSTOM HEADER (Left: Title, Right: Notification) --- */}
+        <View style={tw`flex-row justify-between items-center px-5 py-4 bg-white shadow-sm mb-2`}>
+            {/* 1. Left Side: Dashboard Title */}
+            <Text style={tw`text-2xl font-bold text-gray-800`}>
+                Bookings
+            </Text>
+
+            {/* 2. Right Side: Notification Icon */}
+            <Pressable 
+                onPress={() => router.push('/(owner)/notifications')}
+                style={tw`relative p-2`}
+            >
+                <Ionicons name="notifications-outline" size={28} color="black" />
+                {unreadCount > 0 && (
+                    <View style={tw`absolute top-1 right-1 bg-red-500 w-5 h-5 rounded-full justify-center items-center`}>
+                        <Text style={tw`text-white text-xs font-bold`}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                    </View>
+                )}
+            </Pressable>
+        </View>
+
+      <View style={tw`flex-1 px-5`}>
+        {/* <Text style={tw`text-lg font-semibold text-gray-600 mb-3`}>
+          
+        </Text> */}
 
         {loading ? (
           <ActivityIndicator
@@ -241,6 +268,7 @@ export default function OwnerDashboard() {
                 isCancelling={cancellingId === item.id}
               />
             )}
+            contentContainerStyle={tw`pb-20`}
             ListEmptyComponent={
               <View style={tw`items-center justify-center mt-20`}>
                 <Ionicons

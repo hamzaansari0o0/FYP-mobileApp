@@ -1,5 +1,4 @@
 import { Stack } from 'expo-router';
-import React from 'react';
 
 export default function DashboardStackLayout() {
   return (
@@ -11,8 +10,11 @@ export default function DashboardStackLayout() {
       <Stack.Screen name="users" />
       <Stack.Screen name="arenas" />
       
-      {/* Detail Screen (Naya) */}
+      {/* Detail Screen */}
       <Stack.Screen name="arenaCourts/[ownerId]" />
+
+      {/* --- NEW: Support Screen --- */}
+      <Stack.Screen name="AdminSupportScreen" />
     </Stack>
   );
 }

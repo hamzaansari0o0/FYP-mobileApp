@@ -1,22 +1,23 @@
-import React, { useState, useEffect } from 'react';
-import { 
-    View, Text, ScrollView, TextInput, Alert, 
-    ActivityIndicator, KeyboardAvoidingView, Platform, 
-    StyleSheet, Pressable 
-} from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import tw from 'twrnc';
-import { db } from '../../../firebase/firebaseConfig';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { useAuth } from '../../../context/AuthContext'; 
-// DateTimePickerModal ab zaroori nahi hai
-// import DateTimePickerModal from 'react-native-modal-datetime-picker'; 
-// SafeAreaView bhi yahan zaroori nahi hai kyunki KeyboardAvoidingView hai
-
-// Helper function: Time-related functions ab remove kar dein ge
+import { useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView, Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View
+} from 'react-native';
+import tw from 'twrnc';
+import { useAuth } from '../../../context/AuthContext';
+import { db } from '../../../firebase/firebaseConfig';
+import { notifyAdmins } from '../../../utils/notifications'; // Import Notification Helper
 
 export default function EditCourtDetailScreen() {
-    // 'courtId' ko 'index.jsx' se params ke zariye hasil karein
     const { courtId } = useLocalSearchParams(); 
     const router = useRouter();
     const { user } = useAuth();
@@ -31,17 +32,8 @@ export default function EditCourtDetailScreen() {
         jazzCash: '',
     });
     
-    // openTime aur closeTime state variables ab zaroori nahi hain
-    // const [openTime, setOpenTime] = useState(new Date());
-    // const [closeTime, setCloseTime] = useState(new Date());
-    
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
-    
-    // Time Picker States ab zaroori nahi hain
-    // const [isTimePickerVisible, setTimePickerVisible] = useState(false);
-    // const [pickerType, setPickerType] = useState('open'); 
-    
     const [headerTitle, setHeaderTitle] = useState('Edit Court');
 
     useEffect(() => {
@@ -64,8 +56,6 @@ export default function EditCourtDetailScreen() {
                         return;
                     }
 
-                    // timeStringToDate helper aur time states ko load karna ab remove karein
-                    
                     setDetails({
                         courtName: data.courtName || '',
                         address: data.address || '',
@@ -74,10 +64,6 @@ export default function EditCourtDetailScreen() {
                         accountNumber: data.ownerBankDetails?.accountNumber || '',
                         jazzCash: data.ownerBankDetails?.jazzCash || '',
                     });
-                    
-                    // setOpenTime aur setCloseTime calls ko remove karein
-                    // setOpenTime(timeStringToDate(data.openTime));
-                    // setCloseTime(timeStringToDate(data.closeTime));
                     
                     setHeaderTitle(`Edit: ${data.courtName}`); 
                 } else {
@@ -96,17 +82,13 @@ export default function EditCourtDetailScreen() {
     }, [courtId, user]);
     
     const handleInputChange = (field, value) => {
-      setDetails((prev) => ({ ...prev, [field]: value }));
+        setDetails((prev) => ({ ...prev, [field]: value }));
     };
     
-    // Time Picker logic (handleConfirmTime, handleShowPicker) ab zaroori nahi hai
-    // ...
-
     // --- YEH FUNCTION DATA UPDATE KAREGA (UPDATED) ---
     const handleSave = async () => {
         if (isSaving || !user) return;
 
-        // openTime aur closeTime check ko remove karein
         if (!details.courtName || !details.address || !details.pricePerHour) {
             Alert.alert("Error", "Court Name, Address, aur Price fields fill karna zaroori hai.");
             return;
@@ -126,19 +108,24 @@ export default function EditCourtDetailScreen() {
                 courtName: details.courtName.trim(),
                 address: details.address.trim(),
                 pricePerHour: price,
-                // --- DEFAULT VALUES SET KAREIN ---
-                openTime: '00:00', // Hardcode 12:00 AM
-                closeTime: '23:00', // Hardcode 11:00 PM (1-hour slot)
-                // ------------------------------
+                openTime: '00:00', // Default
+                closeTime: '23:00', // Default
                 ownerBankDetails: {
                     bankName: details.bankName.trim(),
                     accountNumber: details.accountNumber.trim(),
                     jazzCash: details.jazzCash.trim() || '',
                 },
-                status: 'pending', 
+                status: 'pending', // Re-trigger approval
             };
 
             await updateDoc(courtRef, updatedData);
+            
+            // 🔥 NOTIFY ADMINS: Court Updated
+            await notifyAdmins(
+                "Court Details Updated ✏️",
+                `Court '${details.courtName}' updated by owner. Requires re-approval.`,
+                { url: '/(admin)/arenas' }
+            );
             
             Alert.alert("Success", "Court details update ho gayi hain aur dobara approval ke liye bhej di gayi hain.");
             router.back(); 
@@ -205,15 +192,12 @@ export default function EditCourtDetailScreen() {
                 keyboardType="numeric"
               />
 
-              {/* --- OPERATING HOURS SECTION KO REMOVE KAR DIYA GAYA HAI --- */}
               <View style={tw`bg-blue-100 p-3 rounded-lg mt-4`}>
-                 <Text style={tw`text-sm font-semibold text-blue-700 text-center`}>
+                  <Text style={tw`text-sm font-semibold text-blue-700 text-center`}>
                     Booking slots are now set to 24/7 (12:00 AM - 11:00 PM) by default.
-                 </Text>
+                  </Text>
               </View>
-              {/* ------------------------------------------------------------- */}
               
-              {/* Bank Details */}
               <Text style={tw`text-2xl font-bold text-gray-800 mt-6 mb-4`}>Bank Details</Text>
               
               <Text style={tw`text-lg font-semibold mb-3 text-gray-700`}>Bank Name</Text>
@@ -238,8 +222,6 @@ export default function EditCourtDetailScreen() {
                 keyboardType="phone-pad"
               />
           </ScrollView>
-          
-          {/* DateTimePickerModal ko bhi remove kar diya gaya hai */}
         </KeyboardAvoidingView>
     );
 }
@@ -253,5 +235,4 @@ const styles = StyleSheet.create({
         fontSize: 16,
         backgroundColor: tw.color('white'),
     },
-    // timeInput style ki ab zaroorat nahi hai
 });

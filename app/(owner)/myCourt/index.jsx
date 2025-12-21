@@ -1,13 +1,14 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, Pressable, Alert, ActivityIndicator, FlatList, Image } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Stack, useFocusEffect, useRouter } from 'expo-router';
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, FlatList, Image, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
+import ArenaRegistrationForm from '../../../components/specific/ArenaRegistrationForm';
 import { useAuth } from '../../../context/AuthContext';
 import { db } from '../../../firebase/firebaseConfig';
-import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore'; // 'doc', 'getDoc' add kiya
-import { useRouter, useFocusEffect, Stack } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import ArenaRegistrationForm from '../../../components/specific/ArenaRegistrationForm'; 
+import { notifyAdmins } from '../../../utils/notifications'; // Import Notification Helper
 
 // --- Mini Court Card ---
 const OwnerCourtCard = ({ court, onEdit, onManageSlots }) => {
@@ -50,24 +51,22 @@ const OwnerCourtCard = ({ court, onEdit, onManageSlots }) => {
 };
 
 export default function MyCourtScreen() {
-  const { user, userData: initialUserData } = useAuth(); // Context data sirf initial load ke liye
+  const { user } = useAuth();
   const router = useRouter();
   
   const [courts, setCourts] = useState([]);
-  const [loading, setLoading] = useState(true); // Single loading state for screen
-  
-  // Local state for immediate UI updates
+  const [loading, setLoading] = useState(true); 
   const [arenaData, setArenaData] = useState(null);
 
   useFocusEffect(
     useCallback(() => {
-      let isActive = true; // Cleanup handle karne ke liye
+      let isActive = true;
 
       const loadScreenData = async () => {
         if (!user) return;
         
         try {
-          // 1. Hamesha Fresh User Data Fetch karein (Stale data fix)
+          // 1. Fetch Fresh User Data
           const userDocRef = doc(db, 'users', user.uid);
           const userSnapshot = await getDoc(userDocRef);
           
@@ -78,7 +77,7 @@ export default function MyCourtScreen() {
               setArenaData(freshUserData);
             }
 
-            // 2. Agar Arena registered hai, to Courts fetch karein
+            // 2. Fetch Courts if Arena registered
             if (freshUserData.arenaName) {
               const q = query(
                 collection(db, 'courts'),
@@ -103,13 +102,18 @@ export default function MyCourtScreen() {
       loadScreenData();
 
       return () => { isActive = false; };
-    }, [user]) // Sirf 'user' par depend karein, userData par nahi
+    }, [user])
   );
 
-  const handleArenaRegistrationSuccess = (newArenaData) => {
-    // Local update taake refresh ki zaroorat na pare
+  const handleArenaRegistrationSuccess = async (newArenaData) => {
     setArenaData(prev => ({ ...prev, ...newArenaData }));
-    // Hum dubara fetch bhi trigger kar sakte hain agar chahein
+    
+    // 🔥 NOTIFY ADMINS: New Arena Registered
+    await notifyAdmins(
+        "New Arena Request 🏟️",
+        `Owner ${user.email} registered a new arena: ${newArenaData.arenaName}. Please review for approval.`,
+        { url: '/(admin)/arenas' }
+    );
   };
 
   // --- Navigation ---
@@ -123,9 +127,6 @@ export default function MyCourtScreen() {
     router.push('/myCourt/addCourt');
   };
 
-  // --- UI STATES ---
-
-  // 1. Loading
   if (loading) {
     return (
       <SafeAreaView style={tw`flex-1 items-center justify-center bg-gray-100`}>
@@ -134,7 +135,7 @@ export default function MyCourtScreen() {
     );
   }
 
-  // 2. Show Registration Form (If Arena not registered)
+  // Show Registration Form (If Arena not registered)
   if (!arenaData?.arenaName) {
     return (
       <SafeAreaView style={tw`flex-1 bg-gray-100`}>
@@ -147,7 +148,7 @@ export default function MyCourtScreen() {
     );
   }
 
-  // 3. Show Dashboard (If Arena Registered - Pending or Approved)
+  // Show Dashboard
   const status = arenaData.status || 'pending';
   const statusColor =
     status === 'approved' ? 'bg-green-100 border-green-300'

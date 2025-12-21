@@ -4,11 +4,14 @@ import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  ImageBackground,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   Text,
   TextInput,
-  View,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
@@ -18,6 +21,9 @@ import { useAuth } from '../../context/AuthContext';
 import * as Location from 'expo-location';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 
+// --- IMAGE IMPORT ---
+const bgImage = require('../../assets/images/loginForm-image.jpg');
+
 // --- YAHAN APNI API KEY PASTE KAREIN ---
 const GOOGLE_API_KEY = "AIzaSyB32Zst4td-KdZcEXpzHL-nedXtIdBz1bw"; 
 
@@ -25,14 +31,15 @@ const GOOGLE_API_KEY = "AIzaSyB32Zst4td-KdZcEXpzHL-nedXtIdBz1bw";
 const RoleButton = ({ title, onPress, isSelected }) => (
   <Pressable
     style={tw.style(
-      `border-2 border-blue-500 p-4 rounded-lg w-[48%] items-center`,
-      isSelected ? 'bg-blue-500' : 'bg-white'
+      `border-2 p-4 rounded-xl w-[48%] items-center`,
+      isSelected ? 'bg-blue-600 border-blue-600' : 'bg-gray-50 border-gray-300'
     )}
     onPress={onPress}
   >
     <Text
       style={tw.style(
-        isSelected ? 'text-white font-bold' : 'text-blue-500 font-bold'
+        `font-bold`,
+        isSelected ? 'text-white' : 'text-gray-600'
       )}
     >
       {title}
@@ -66,11 +73,22 @@ export default function Signup() {
   const { signup } = useAuth(); 
   const router = useRouter(); 
 
+  // --- UPDATED INPUT HANDLER (Mobile Logic Added) ---
   const handleInputChange = (field, value) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    if (field === 'mobileNumber') {
+      // 1. Sirf Numbers allow karein (No alphabets/symbols)
+      const numericValue = value.replace(/[^0-9]/g, '');
+      
+      // 2. Limit: Exact 11 digits
+      if (numericValue.length > 11) return;
+      
+      setFormData((prev) => ({ ...prev, [field]: numericValue }));
+    } else {
+      setFormData((prev) => ({ ...prev, [field]: value }));
+    }
   };
 
-  // --- 1. CURRENT LOCATION LOGIC (Smart Fallback for Pakistan) ---
+  // --- 1. CURRENT LOCATION LOGIC ---
   const handleCurrentLocation = async () => {
     setLoadingLocation(true);
     try {
@@ -102,9 +120,9 @@ export default function Signup() {
                 foundCity = c.long_name;
             }
         });
-        if (!foundCity) foundCity = "Lahore"; // Default fallback
+        if (!foundCity) foundCity = "Lahore"; 
 
-        // --- STEP B: Area Dhoondo (Standard Method) ---
+        // --- STEP B: Area Dhoondo ---
         mainComponents.forEach(c => {
              if (c.types.includes('sublocality') || 
                  c.types.includes('sublocality_level_1') || 
@@ -113,35 +131,26 @@ export default function Signup() {
              }
         });
 
-        // --- STEP C: Agar Area "Code" hai ya missing hai, to String Split karo (Effective for Pakistan) ---
-        // Address example: "97M8+JF, Block A Johar Town, Lahore, Pakistan"
+        // --- STEP C: Fallback Logic ---
         if (!foundArea || foundArea.includes('+')) {
             const formattedAddress = data.results[0].formatted_address;
             const parts = formattedAddress.split(',').map(part => part.trim()); 
-            
-            // City ka index dhoondo (e.g. "Lahore")
             const cityIndex = parts.findIndex(part => part === foundCity);
             
             if (cityIndex > 0) {
-                // City se pichla hissa uthao (Usually Area hota hai)
                 let candidate = parts[cityIndex - 1]; 
-                
-                // Agar wo candidate bhi "Plus Code" hai, to us se pichla uthao
                 if (candidate.includes('+') && cityIndex > 1) {
                     candidate = parts[cityIndex - 2];
                 }
-
-                // Agar ab theek hai to set kar do
                 if (!candidate.includes('+')) {
                     foundArea = candidate;
                 }
             } else if (parts.length >= 3) {
-                // Agar city match na ho, to standard format (Street, Area, City, Country) mein se 3rd last utha lo
                 foundArea = parts[parts.length - 3];
             }
         }
 
-        // --- STEP D: Agar ab bhi nahi mila, to Result[1] check karo ---
+        // --- STEP D: Final Check ---
         if ((!foundArea || foundArea.includes('+')) && data.results[1]) {
             const secondComponents = data.results[1].address_components;
             secondComponents.forEach(c => {
@@ -151,9 +160,8 @@ export default function Signup() {
             });
         }
 
-        // --- FINAL FALBACK ---
         if (!foundArea || foundArea.includes('+')) {
-             foundArea = ""; // User hath se likhega
+             foundArea = ""; 
              Alert.alert("Exact Area Not Found", "Please type your area manually in the search bar.");
         }
 
@@ -161,7 +169,6 @@ export default function Signup() {
         setArea(foundArea);
         setCity(foundCity);
         
-        // Formatted text banao (e.g., "Johar Town, Lahore")
         const cleanAddress = foundArea ? `${foundArea}, ${foundCity}` : foundCity;
         setFullAddress(data.results[0].formatted_address); 
         
@@ -188,19 +195,18 @@ export default function Signup() {
       return;
     }
     
-    // Validation
-    if (
-      !formData.name ||
-      !formData.email ||
-      !formData.password ||
-      !formData.confirmPassword ||
-      !formData.mobileNumber ||
-      !city || !area // Location check
-    ) {
+    if (!formData.name || !formData.email || !formData.password || !formData.confirmPassword || !formData.mobileNumber || !city || !area) {
       setError('Please fill in all required fields including location.');
       return;
     }
     
+    // --- MOBILE VALIDATION (Must start with 03 and be 11 digits) ---
+    const phoneRegex = /^03\d{9}$/; 
+    if (!phoneRegex.test(formData.mobileNumber)) {
+      setError('Invalid Mobile Number. Use format: 03001234567 (Must start with 03).');
+      return;
+    }
+
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match.');
       return;
@@ -247,171 +253,192 @@ export default function Signup() {
   };
 
   return (
-    <SafeAreaView style={tw`flex-1 bg-white`}>
-      <ScrollView
-        style={tw`flex-1`}
-        contentContainerStyle={tw`p-6 pb-12`}
-        keyboardShouldPersistTaps='handled'
-      >
-        <Text style={tw`text-3xl font-bold text-center mb-6 text-gray-800`}>
-          Create Account
-        </Text>
+    // 1. Background Image Container (As per your request - simple style)
+    <ImageBackground source={bgImage} style={tw`flex-1`} resizeMode="cover">
+      
+      {/* 2. Overlay to make text readable */}
+      <View style={tw`flex-1 bg-black/50`}>
+        
+        <SafeAreaView style={tw`flex-1`}>
+          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={tw`flex-1`}>
+            
+            <ScrollView
+              style={tw`flex-1`}
+              contentContainerStyle={tw`p-6 pb-12`}
+              keyboardShouldPersistTaps='handled'
+            >
+              {/* 3. White Box Container */}
+              <View style={tw`bg-white/95 p-5 rounded-2xl shadow-xl`}>
 
-        <Text style={tw`text-lg font-semibold mb-3 text-gray-700`}>Select Your Role:</Text>
-        <View style={tw`flex-row justify-between mb-5`}>
-          <RoleButton
-            title="Player"
-            onPress={() => setSelectedRole('player')}
-            isSelected={selectedRole === 'player'}
-          />
-          <RoleButton
-            title="Court Owner"
-            onPress={() => setSelectedRole('owner')}
-            isSelected={selectedRole === 'owner'}
-          />
-        </View>
+                  <Text style={tw`text-3xl font-bold text-center mb-6 text-gray-800`}>
+                    Create Account
+                  </Text>
 
-        {selectedRole && (
-          <>
-            <Text style={tw`text-lg font-semibold mb-3 text-gray-700`}>Full Name</Text>
-            <TextInput
-              style={tw`border border-gray-300 p-4 rounded-lg mb-4 text-base`}
-              placeholder="Your Name"
-              value={formData.name}
-              onChangeText={(val) => handleInputChange('name', val)}
-            />
-            
-            <Text style={tw`text-lg font-semibold mb-3 text-gray-700`}>Email</Text>
-            <TextInput
-              style={tw`border border-gray-300 p-4 rounded-lg mb-4 text-base`}
-              placeholder="Email"
-              value={formData.email}
-              onChangeText={(val) => handleInputChange('email', val)}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-            
-            <Text style={tw`text-lg font-semibold mb-3 text-gray-700`}>Mobile Number</Text>
-            <TextInput
-              style={tw`border border-gray-300 p-4 rounded-lg mb-4 text-base`}
-              placeholder="0300-1234567"
-              value={formData.mobileNumber}
-              onChangeText={(val) => handleInputChange('mobileNumber', val)}
-              keyboardType="phone-pad"
-            />
-            
-            {/* --- LOCATION SECTION --- */}
-            <Text style={tw`text-lg font-semibold mb-2 text-gray-700`}>Your Location (City & Area)</Text>
-            
-            {/* Google Autocomplete */}
-            <View style={tw`flex-row mb-3 z-50`}> 
-                <View style={tw`flex-1`}>
-                    <GooglePlacesAutocomplete
-                    ref={googleRef}
-                    placeholder='Search Area (e.g. Johar Town)'
-                    minLength={2}
-                    fetchDetails={true}
-                    onPress={(data, details = null) => {
-                        const description = data.description; 
-                        const parts = description.split(',');
-                        // Manual Search Extract
-                        setArea(parts[0]?.trim());
-                        setCity(parts[1]?.trim() || parts[0]?.trim());
-                        setFullAddress(description);
-                        if(details) {
-                            setCoordinates({
-                                lat: details.geometry.location.lat,
-                                lng: details.geometry.location.lng
-                            });
-                        }
-                    }}
-                    query={{
-                        key: GOOGLE_API_KEY,
-                        language: 'en',
-                        components: 'country:pk', 
-                    }}
-                    styles={{
-                        textInputContainer: tw`bg-white border border-gray-300 rounded-lg`,
-                        textInput: tw`h-12 text-gray-700 text-base bg-transparent`,
-                        listView: tw`absolute top-14 left-0 right-0 bg-white z-50 shadow-lg rounded-lg border border-gray-100`,
-                    }}
-                    enablePoweredByContainer={false}
+                  <Text style={tw`text-lg font-semibold mb-3 text-gray-700`}>Select Your Role:</Text>
+                  <View style={tw`flex-row justify-between mb-5`}>
+                    <RoleButton
+                      title="Player"
+                      onPress={() => setSelectedRole('player')}
+                      isSelected={selectedRole === 'player'}
                     />
-                </View>
-            </View>
+                    <RoleButton
+                      title="Court Owner"
+                      onPress={() => setSelectedRole('owner')}
+                      isSelected={selectedRole === 'owner'}
+                    />
+                  </View>
 
-            {/* Current Location Button */}
-            <Pressable 
-                onPress={handleCurrentLocation}
-                disabled={loadingLocation}
-                style={tw`flex-row items-center justify-center bg-blue-50 p-3 rounded-lg border border-blue-100 mb-4`}
-            >
-                {loadingLocation ? (
-                    <ActivityIndicator size="small" color={tw.color('blue-600')} />
-                ) : (
+                  {selectedRole && (
                     <>
-                        <Ionicons name="navigate-circle" size={24} color={tw.color('blue-600')} />
-                        <Text style={tw`text-blue-700 font-bold ml-2`}>Use Current Location</Text>
+                      <Text style={tw`text-base font-semibold mb-2 text-gray-700`}>Full Name</Text>
+                      <TextInput
+                        style={tw`border border-gray-300 p-4 rounded-xl mb-4 text-base bg-gray-50`}
+                        placeholder="Your Name"
+                        value={formData.name}
+                        onChangeText={(val) => handleInputChange('name', val)}
+                      />
+                      
+                      <Text style={tw`text-base font-semibold mb-2 text-gray-700`}>Email</Text>
+                      <TextInput
+                        style={tw`border border-gray-300 p-4 rounded-xl mb-4 text-base bg-gray-50`}
+                        placeholder="Email"
+                        value={formData.email}
+                        onChangeText={(val) => handleInputChange('email', val)}
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                      />
+                      
+                      <Text style={tw`text-base font-semibold mb-2 text-gray-700`}>Mobile Number (PK)</Text>
+                      <TextInput
+                        style={tw`border border-gray-300 p-4 rounded-xl mb-4 text-base bg-gray-50`}
+                        placeholder="03001234567" // Updated Placeholder
+                        value={formData.mobileNumber}
+                        onChangeText={(val) => handleInputChange('mobileNumber', val)}
+                        keyboardType="number-pad" // Enforces numeric keyboard
+                        maxLength={11} // Enforces 11 digits
+                      />
+                      
+                      {/* --- LOCATION SECTION --- */}
+                      <Text style={tw`text-base font-semibold mb-2 text-gray-700`}>Your Location (City & Area)</Text>
+                      
+                      {/* Google Autocomplete Container */}
+                      <View style={tw`flex-row z-50 h-14 relative`}> 
+                          <View style={tw`flex-1 absolute top-0 left-0 right-0 z-50`}>
+                              <GooglePlacesAutocomplete
+                              ref={googleRef}
+                              placeholder='Search Area (e.g. Johar Town)'
+                              minLength={2}
+                              fetchDetails={true}
+                              onPress={(data, details = null) => {
+                                  const description = data.description; 
+                                  const parts = description.split(',');
+                                  setArea(parts[0]?.trim());
+                                  setCity(parts[1]?.trim() || parts[0]?.trim());
+                                  setFullAddress(description);
+                                  if(details) {
+                                      setCoordinates({
+                                          lat: details.geometry.location.lat,
+                                          lng: details.geometry.location.lng
+                                      });
+                                  }
+                              }}
+                              query={{
+                                  key: GOOGLE_API_KEY,
+                                  language: 'en',
+                                  components: 'country:pk', 
+                              }}
+                              styles={{
+                                  textInputContainer: tw`bg-gray-50 border border-gray-300 rounded-xl`,
+                                  textInput: tw`h-12 text-gray-700 text-base bg-transparent`,
+                                  listView: tw`absolute top-14 left-0 right-0 bg-white z-50 shadow-lg rounded-xl border border-gray-200 max-h-60`,
+                              }}
+                              enablePoweredByContainer={false}
+                              />
+                          </View>
+                      </View>
+
+                      {/* Spacer View to ensure list opens properly */}
+                      <View style={tw`h-2`} /> 
+
+                      {/* Current Location Button with GAP (mt-6) */}
+                      <Pressable 
+                          onPress={handleCurrentLocation}
+                          disabled={loadingLocation}
+                          style={tw`flex-row items-center justify-center bg-blue-50 p-3 rounded-xl border border-blue-100 mb-4 mt-6`}
+                      >
+                          {loadingLocation ? (
+                              <ActivityIndicator size="small" color={tw.color('blue-600')} />
+                          ) : (
+                              <>
+                                  <Ionicons name="navigate-circle" size={24} color={tw.color('blue-600')} />
+                                  <Text style={tw`text-blue-700 font-bold ml-2`}>Use Current Location</Text>
+                              </>
+                          )}
+                      </Pressable>
+
+                      {/* Display Selection */}
+                      {city ? (
+                          <View style={tw`bg-green-50 p-3 rounded-xl mb-4 border border-green-200`}>
+                              <Text style={tw`text-green-800 font-bold`}>
+                                  Selected: <Text style={tw`font-normal`}>{area}, {city}</Text>
+                              </Text>
+                          </View>
+                      ) : null}
+                      
+                      <Text style={tw`text-base font-semibold mb-2 text-gray-700`}>Password</Text>
+                      <TextInput
+                        style={tw`border border-gray-300 p-4 rounded-xl mb-4 text-base bg-gray-50`}
+                        placeholder="Password (min. 6 characters)"
+                        value={formData.password}
+                        onChangeText={(val) => handleInputChange('password', val)}
+                        secureTextEntry
+                      />
+                      
+                      <Text style={tw`text-base font-semibold mb-2 text-gray-700`}>Confirm Password</Text>
+                      <TextInput
+                        style={tw`border border-gray-300 p-4 rounded-xl mb-4 text-base bg-gray-50`}
+                        placeholder="Confirm Password"
+                        value={formData.confirmPassword}
+                        onChangeText={(val) => handleInputChange('confirmPassword', val)}
+                        secureTextEntry
+                      />
+                      
+                      {error && <Text style={tw`text-red-600 font-bold text-center mb-4`}>{error}</Text>}
+
+                      <Pressable
+                        style={tw.style(
+                          `bg-blue-600 py-4 rounded-xl shadow-md mt-2`,
+                          loading && `bg-blue-400`
+                        )}
+                        onPress={handleSignup}
+                        disabled={loading}
+                      >
+                        {loading ? (
+                          <ActivityIndicator color={tw.color('white')} />
+                        ) : (
+                          <Text style={tw`text-white text-center text-lg font-bold`}>
+                            {`Register as ${selectedRole}`}
+                          </Text>
+                        )}
+                      </Pressable>
                     </>
-                )}
-            </Pressable>
+                  )}
 
-            {/* Display Selection */}
-            {city ? (
-                <View style={tw`bg-green-50 p-3 rounded-lg mb-4 border border-green-200`}>
-                    <Text style={tw`text-green-800 font-bold`}>
-                        Selected: <Text style={tw`font-normal`}>{area}, {city}</Text>
-                    </Text>
-                </View>
-            ) : null}
-            
-            <Text style={tw`text-lg font-semibold mb-3 text-gray-700`}>Password</Text>
-            <TextInput
-              style={tw`border border-gray-300 p-4 rounded-lg mb-4 text-base`}
-              placeholder="Password (min. 6 characters)"
-              value={formData.password}
-              onChangeText={(val) => handleInputChange('password', val)}
-              secureTextEntry
-            />
-            
-            <Text style={tw`text-lg font-semibold mb-3 text-gray-700`}>Confirm Password</Text>
-            <TextInput
-              style={tw`border border-gray-300 p-4 rounded-lg mb-4 text-base`}
-              placeholder="Confirm Password"
-              value={formData.confirmPassword}
-              onChangeText={(val) => handleInputChange('confirmPassword', val)}
-              secureTextEntry
-            />
-            
-            {error && <Text style={tw`text-red-500 text-center mb-4`}>{error}</Text>}
-
-            <Pressable
-              style={tw.style(
-                `bg-blue-600 py-4 rounded-lg shadow-md mt-2`,
-                loading && `bg-blue-400`
-              )}
-              onPress={handleSignup}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color={tw.color('white')} />
-              ) : (
-                <Text style={tw`text-white text-center text-lg font-bold`}>
-                  {`Register as ${selectedRole}`}
-                </Text>
-              )}
-            </Pressable>
-          </>
-        )}
-
-        <Link href="/(auth)/login" asChild>
-          <Pressable style={tw`mt-6`}>
-            <Text style={tw`text-blue-600 text-center text-base font-medium`}>
-              Already have an account? Login
-            </Text>
-          </Pressable>
-        </Link>
-      </ScrollView>
-    </SafeAreaView>
+                  <Link href="/(auth)/login" asChild>
+                    <Pressable style={tw`mt-6`}>
+                      <Text style={tw`text-blue-600 text-center text-base font-semibold`}>
+                        Already have an account? Login
+                      </Text>
+                    </Pressable>
+                  </Link>
+                  
+              </View> 
+              {/* End White Box */}
+              
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </View>
+    </ImageBackground>
   );
 }

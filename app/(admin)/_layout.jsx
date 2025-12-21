@@ -1,7 +1,6 @@
-import React from "react";
+import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import tw from "twrnc";
-import { Ionicons } from "@expo/vector-icons";
 
 export default function AdminTabLayout() {
   return (
@@ -10,8 +9,8 @@ export default function AdminTabLayout() {
         headerShown: false,
         tabBarActiveTintColor: tw.color("purple-600"), // Admin theme
         tabBarInactiveTintColor: tw.color("gray-400"),
-        tabBarStyle: tw`bg-white border-t border-gray-200 pt-2`,
-        tabBarLabelStyle: tw`text-xs font-medium mb-1`,
+        tabBarStyle: tw`bg-white border-t border-gray-200 `,
+        tabBarLabelStyle: tw`text-xs font-medium `,
       }}
     >
       {/* 🟣 Tab 1: Dashboard */}

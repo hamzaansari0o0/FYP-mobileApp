@@ -1,5 +1,4 @@
-import React from "react";
-import { View, Text, ImageBackground } from "react-native";
+import { ImageBackground, Text, View } from "react-native";
 import tw from "twrnc";
 
 export default function HeroSection() {
@@ -8,7 +7,7 @@ export default function HeroSection() {
     <View style={tw`w-full h-72 bg-gray-900`}>
       <ImageBackground
         // Apni image ka path yahan lagayein
-        source={require("../../../assets/images/hero-image.png")} 
+        source={require("../../../assets/images/hero-image.webp")} 
         resizeMode="cover"
         style={tw`flex-1 justify-end`}
       >
@@ -17,18 +16,21 @@ export default function HeroSection() {
         
         {/* Content Container with Padding */}
         <View style={tw`p-6 pb-8`}>
+          {/* Badge */}
           <View style={tw`bg-green-600 self-start px-3 py-1 rounded-full mb-3`}>
             <Text style={tw`text-white text-xs font-bold uppercase`}>
-              Play & Compete
+              Play Now
             </Text>
           </View>
 
+          {/* Main Headline - Short & Impactful */}
           <Text style={tw`text-3xl font-extrabold text-white shadow-md leading-tight`}>
-            Your Sports Journey Starts Here
+            Find Your Court
           </Text>
           
-          <Text style={tw`text-base text-gray-200 mt-2 shadow-sm font-medium pr-4`}>
-            Discover venues, join leagues, and connect with players. Court Chuno makes it easy to find your next game.
+          {/* Subtext - Simple One Liner */}
+          <Text style={tw`text-base text-gray-200 mt-1 shadow-sm font-medium pr-4`}>
+            Book top sports venues near you instantly.
           </Text>
         </View>
       </ImageBackground>

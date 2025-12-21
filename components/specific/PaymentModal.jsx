@@ -1,15 +1,16 @@
-import React, { useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import { useState } from "react";
 import {
-  View,
-  Text,
-  Pressable,
-  Modal,
   ActivityIndicator,
   Alert,
-  TextInput, // {/* === 1. IMPORTED TextInput === */}
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View
 } from "react-native";
 import tw from "twrnc";
-import { Ionicons } from "@expo/vector-icons";
 
 export default function PaymentModal({
   visible,
@@ -18,41 +19,21 @@ export default function PaymentModal({
   onConfirmPayment,
 }) {
   const [isPaying, setIsPaying] = useState(false);
-  // {/* === 2. ADDED STATE FOR JAZZCASH NUMBER === */}
   const [refundAccountNumber, setRefundAccountNumber] = useState("");
 
   const handlePayment = async () => {
-    // {/* === 3. ADDED VALIDATION === */}
-    if (!refundAccountNumber.trim()) {
-      Alert.alert(
-        "Missing Information",
-        "Please enter your JazzCash number for any potential refunds."
-      );
-      return;
-    }
-    // Optional: Simple validation for 11 digits
-    if (refundAccountNumber.length !== 11 || !/^[0-9]+$/.test(refundAccountNumber)) {
-       Alert.alert(
-        "Invalid Number",
-        "Please enter a valid 11-digit JazzCash number (e.g., 03001234567)."
-      );
+    if (!refundAccountNumber.trim() || refundAccountNumber.length !== 11) {
+      Alert.alert("Invalid Number", "Please enter a valid 11-digit JazzCash number.");
       return;
     }
 
     try {
       setIsPaying(true);
-
-      // 🧾 Simulated Payment Delay (for UX)
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      // {/* === 4. PASSING THE NUMBER TO THE CONFIRM FUNCTION === */}
-      await onConfirmPayment(refundAccountNumber); // Pass the number back
-      
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await onConfirmPayment(refundAccountNumber);
+      setRefundAccountNumber(""); 
     } catch (error) {
-      Alert.alert(
-        "Booking Failed",
-        error?.message || "An error occurred during booking."
-      );
+      Alert.alert("Error", error?.message || "Payment failed.");
     } finally {
       setIsPaying(false);
     }
@@ -67,93 +48,80 @@ export default function PaymentModal({
       visible={visible}
       onRequestClose={onClose}
     >
-      <View style={tw`flex-1 justify-end bg-black/50`}>
-        <View style={tw`bg-white rounded-t-2xl p-6 shadow-lg`}>
-          {/* Header */}
-          <View style={tw`flex-row justify-between items-center mb-4`}>
-            <Text style={tw`text-2xl font-bold text-gray-800`}>
-              Confirm Booking
-            </Text>
-            <Pressable onPress={onClose} style={tw`p-1`}>
-              <Ionicons
-                name="close-circle"
-                size={28}
-                color={tw.color("gray-400")}
-              />
+      <View style={tw`flex-1 justify-end bg-black/60`}>
+        <View style={tw`bg-white rounded-t-3xl p-6 shadow-2xl h-[70%]`}>
+          
+          <View style={tw`flex-row justify-between items-center mb-6`}>
+            <Text style={tw`text-xl font-bold text-gray-900`}>Confirm Booking</Text>
+            <Pressable onPress={onClose} style={tw`p-1 bg-gray-100 rounded-full`}>
+              <Ionicons name="close" size={24} color="#374151" />
             </Pressable>
           </View>
 
-          {/* Booking Details */}
-          <View style={tw`mb-5`}>
-            <Text style={tw`text-base text-gray-600 mb-1`}>
-              Court: {bookingDetails.courtName}
-            </Text>
-            <Text style={tw`text-base text-gray-600 mb-1`}>
-              Date: {bookingDetails.date}
-            </Text>
-            <Text style={tw`text-base text-gray-600 mb-3`}>
-              Slot: {bookingDetails.timeDisplay}
-            </Text>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {/* Ticket Summary */}
+            <View style={tw`bg-gray-50 p-4 rounded-xl border border-gray-100 mb-6`}>
+                <View style={tw`flex-row justify-between mb-2`}>
+                <Text style={tw`text-gray-500`}>Arena</Text>
+                <Text style={tw`font-bold text-gray-800`}>{bookingDetails.arenaName}</Text>
+                </View>
+                <View style={tw`flex-row justify-between mb-2`}>
+                <Text style={tw`text-gray-500`}>Court</Text>
+                <Text style={tw`font-bold text-gray-800`}>{bookingDetails.courtName}</Text>
+                </View>
+                <View style={tw`flex-row justify-between mb-2`}>
+                <Text style={tw`text-gray-500`}>Date</Text>
+                <Text style={tw`font-bold text-gray-800`}>{bookingDetails.date}</Text>
+                </View>
+                
+                <View style={tw`mb-2`}>
+                    <Text style={tw`text-gray-500 mb-1`}>Selected Slots ({bookingDetails.slotCount})</Text>
+                    <Text style={tw`font-bold text-blue-600 text-sm leading-5`}>
+                        {bookingDetails.timeDisplay}
+                    </Text>
+                </View>
 
-            {/* === 5. NEW JAZZCASH INPUT FIELD === */}
-            <View style={tw`mt-4`}>
-              <Text style={tw`text-sm font-medium text-gray-700 mb-1`}>
-                Refund JazzCash Number
-              </Text>
-              <View
-                style={tw`flex-row items-center bg-gray-100 border border-gray-300 rounded-lg p-3`}
-              >
-                <Ionicons
-                  name="wallet-outline"
-                  size={20}
-                  color={tw.color("gray-500")}
-                />
+                <View style={tw`h-[1px] bg-gray-200 my-3`} />
+                
+                <View style={tw`flex-row justify-between items-center`}>
+                <Text style={tw`text-lg font-bold text-gray-900`}>Total Amount</Text>
+                <Text style={tw`text-2xl font-extrabold text-green-700`}>Rs. {bookingDetails.totalPrice}</Text>
+                </View>
+            </View>
+
+            {/* Input Field */}
+            <Text style={tw`text-sm font-bold text-gray-700 mb-2 ml-1`}>Refund JazzCash Number</Text>
+            <View style={tw`flex-row items-center border border-gray-300 rounded-xl px-3 py-3 mb-1 bg-white`}>
+                <Ionicons name="wallet-outline" size={20} color="gray" />
                 <TextInput
-                  style={tw`flex-1 ml-2 text-base text-gray-900`}
-                  placeholder="e.g., 03001234567"
-                  placeholderTextColor={tw.color("gray-400")}
-                  keyboardType="phone-pad"
-                  value={refundAccountNumber}
-                  onChangeText={setRefundAccountNumber}
-                  maxLength={11}
+                style={tw`flex-1 ml-3 text-base text-gray-900`}
+                placeholder="03XXXXXXXXX"
+                keyboardType="phone-pad"
+                maxLength={11}
+                value={refundAccountNumber}
+                onChangeText={setRefundAccountNumber}
                 />
-              </View>
-              <Text style={tw`text-xs text-gray-500 mt-1`}>
-                This number will be used for any potential refunds.
-              </Text>
             </View>
-            {/* === END OF NEW FIELD === */}
+            <Text style={tw`text-xs text-gray-400 mb-6 ml-1`}>Required for refunds in case of cancellation.</Text>
 
-            <View style={tw`border-t border-gray-200 pt-3 mt-5`}>
-              {/* Added mt-5 for spacing */}
-              <View style={tw`flex-row justify-between`}>
-                <Text style={tw`text-lg font-bold text-blue-600`}>
-                  Full Amount to Pay:
+            {/* Pay Button */}
+            <Pressable
+                style={tw.style(
+                `bg-green-600 py-4 rounded-xl items-center shadow-md mb-6`,
+                isPaying && `bg-green-400`
+                )}
+                onPress={handlePayment}
+                disabled={isPaying}
+            >
+                {isPaying ? (
+                <ActivityIndicator color="#fff" />
+                ) : (
+                <Text style={tw`text-white text-center text-lg font-bold`}>
+                    Pay Rs. {bookingDetails.totalPrice}
                 </Text>
-                <Text style={tw`text-lg font-bold text-blue-600`}>
-                  Rs. {bookingDetails.amountPaid}
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Payment Button */}
-          <Pressable
-            style={tw.style(
-              `bg-green-600 py-4 rounded-lg shadow-md`,
-              isPaying && `bg-green-400`
-            )}
-            onPress={handlePayment}
-            disabled={isPaying}
-          >
-            {isPaying ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={tw`text-white text-center text-lg font-bold`}>
-                Pay Rs. {bookingDetails.amountPaid} (Simulated)
-              </Text>
-            )}
-          </Pressable>
+                )}
+            </Pressable>
+          </ScrollView>
         </View>
       </View>
     </Modal>

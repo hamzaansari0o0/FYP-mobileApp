@@ -1,22 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import { useLocalSearchParams } from 'expo-router';
+import { doc, getDoc, runTransaction } from 'firebase/firestore';
+import moment from 'moment';
+import { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  Pressable,
   ActivityIndicator,
   Alert,
   FlatList,
+  Pressable,
   ScrollView,
+  Text,
+  View,
 } from 'react-native';
-import tw from 'twrnc';
 import { Calendar } from 'react-native-calendars';
-import { db } from '../../../firebase/firebaseConfig';
-import { doc, getDoc, runTransaction } from 'firebase/firestore';
-import { useAuth } from '../../../context/AuthContext';
-import { useLocalSearchParams } from 'expo-router';
-import moment from 'moment';
-import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import tw from 'twrnc';
+import { useAuth } from '../../../context/AuthContext';
+import { db } from '../../../firebase/firebaseConfig';
 
 // 🕒 Helper: Get today's date as string
 const getTodayString = () => moment().format('YYYY-MM-DD');

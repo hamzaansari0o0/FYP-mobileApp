@@ -1,260 +1,338 @@
-import React, { useState } from 'react';
+import { Ionicons, MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
+import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { getDownloadURL, ref, uploadBytesResumable } from 'firebase/storage';
+import { useRef, useState } from 'react';
 import {
-  View, Text, TextInput, Pressable, Alert,
-  ActivityIndicator, ScrollView, Image
+  ActivityIndicator,
+  Alert,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View
 } from 'react-native';
+import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
+import MapView, { PROVIDER_GOOGLE } from 'react-native-maps';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
 import { db, storage } from '../../firebase/firebaseConfig';
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import * as ImagePicker from 'expo-image-picker';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+
+const GOOGLE_API_KEY = "AIzaSyCvS4c7w-SNnMGWtDh-74QUB6rMoy1iDVA"; 
 
 export default function ArenaRegistrationForm({ user, onRegistrationSuccess }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  
+  const [formData, setFormData] = useState({ arenaName: '', arenaAddress: '' });
+  const [locationCoords, setLocationCoords] = useState(null); 
+  const [fullAddress, setFullAddress] = useState('');
+  
+  const [thumbnailImage, setThumbnailImage] = useState(null); 
+  const [documentImage, setDocumentImage] = useState(null); 
 
-  const [formData, setFormData] = useState({
-    arenaName: '',
-    arenaAddress: '',
+  // --- Map States ---
+  const [mapModalVisible, setMapModalVisible] = useState(false);
+  const [currentRegion, setCurrentRegion] = useState({
+    latitude: 31.5204, longitude: 74.3587, latitudeDelta: 0.005, longitudeDelta: 0.005,
   });
+  const [isMapMoving, setIsMapMoving] = useState(false);
+  const [liveAddress, setLiveAddress] = useState("Move map to select location");
 
-  // Do alag states images ke liye
-  const [thumbnailImage, setThumbnailImage] = useState(null); // App mein dikhane ke liye
-  const [documentImage, setDocumentImage] = useState(null);   // Admin approval ke liye
+  // List Visibility Control
+  const [listVisible, setListVisible] = useState(true); 
+  
+  const mapRef = useRef(null);
+  const googlePlacesRef = useRef(null); 
 
-  const handleInputChange = (field, value) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-  };
+  // --- Smart Address Logic ---
+  const parseCleanAddress = (results) => {
+      const validResults = results.filter(r => {
+          const isPlusCode = r.formatted_address.includes('+') && r.formatted_address.split(',')[0].length < 10;
+          return !isPlusCode; 
+      });
 
-  // --- Image Picker (Reusable) ---
-  const pickImage = async (type) => {
-    // type = 'thumbnail' or 'document'
-    
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission Denied', 'Sorry, we need camera roll permissions to make this work!');
-      return;
-    }
+      if (validResults.length === 0) return results[0]?.formatted_address || "Address not found";
 
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'], // Updated for new Expo version
-      allowsEditing: true, // User crop kar sake
-      aspect: type === 'thumbnail' ? [16, 9] : [4, 3], // Thumbnail wide acha lagta hai
-      quality: 0.7,
-    });
-
-    if (!result.canceled) {
-      const asset = result.assets[0];
-
-      // 5MB Validation
-      if (asset.fileSize && asset.fileSize > 5 * 1024 * 1024) {
-        Alert.alert('File Too Large', 'Please select an image smaller than 5MB.');
-        return;
-      }
-
-      if (type === 'thumbnail') {
-        setThumbnailImage(asset.uri);
-      } else {
-        setDocumentImage(asset.uri);
-      }
-    }
-  };
-
-  // --- Upload Logic (Reliable XHR) ---
-  const uploadImageAsync = async (uri, folderName) => {
-    const blob = await new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.onload = function () { resolve(xhr.response); };
-      xhr.onerror = function (e) { 
-        console.log(e); 
-        reject(new TypeError("Network request failed")); 
-      };
-      xhr.responseType = "blob";
-      xhr.open("GET", uri, true);
-      xhr.send(null);
-    });
-
-    // Unique name: arenas/USER_ID/thumbnail_TIMESTAMP
-    const fileRef = ref(storage, `arenas/${user.uid}/${folderName}_${Date.now()}`);
-    
-    return new Promise((resolve, reject) => {
-      const uploadTask = uploadBytesResumable(fileRef, blob);
-
-      uploadTask.on('state_changed', 
-        (snapshot) => {
-          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          // Hum sirf total progress dikhayenge, isliye isay exact map nahi kar rahe abhi
-          // lekin aap chahein to use kar sakte hain
-        }, 
-        (error) => {
-          blob.close();
-          reject(error);
-        }, 
-        async () => {
-          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-          blob.close();
-          resolve(downloadURL);
-        }
+      const bestMatch = validResults.find(r => 
+          r.types.includes('street_address') || 
+          r.types.includes('premise') || 
+          r.types.includes('sublocality') ||
+          r.types.includes('route')
       );
-    });
+
+      return bestMatch ? bestMatch.formatted_address : validResults[0].formatted_address;
   };
 
-  const handleRegisterArena = async () => {
-    // 1. Basic Validation
-    if (!formData.arenaName || !formData.arenaAddress) {
-      Alert.alert('Missing Fields', 'Please fill Arena Name and Address.');
-      return;
-    }
-
-    // 2. Image Validation
-    if (!thumbnailImage) {
-      Alert.alert('Missing Thumbnail', 'Please upload a Cover Image for your Arena.');
-      return;
-    }
-    if (!documentImage) {
-      Alert.alert('Missing Document', 'Please upload a Valid Document for Admin Approval.');
-      return;
-    }
-
-    setIsSubmitting(true);
-    setUploadProgress(0);
-
+  const fetchAddress = async (lat, lng) => {
     try {
-      // Step 1: Thumbnail Upload
-      setUploadProgress(30);
-      const thumbnailUrl = await uploadImageAsync(thumbnailImage, 'thumbnail');
-      
-      // Step 2: Document Upload
-      setUploadProgress(60);
-      const documentUrl = await uploadImageAsync(documentImage, 'document');
-
-      setUploadProgress(90);
-
-      // Step 3: Update Firestore (User Profile)
-      const userRef = doc(db, 'users', user.uid);
-      
-      const updatedData = {
-        arenaName: formData.arenaName.trim(),
-        arenaAddress: formData.arenaAddress.trim(),
-        arenaImageUrl: thumbnailUrl,      // Public viewing ke liye
-        arenaDocumentUrl: documentUrl,    // Admin checking ke liye
-        status: 'pending',                // Approval ke liye pending
-        updatedAt: serverTimestamp(),
-      };
-
-      await updateDoc(userRef, updatedData);
-      
-      setUploadProgress(100);
-      Alert.alert('Success!', 'Your Arena details and documents have been submitted for Admin Approval.');
-      
-      if (onRegistrationSuccess) {
-        onRegistrationSuccess(updatedData);
-      }
-
-    } catch (error) {
-      console.error('Error registering arena: ', error);
-      Alert.alert('Error', 'Registration failed. Please check your internet connection.');
-    } finally {
-      setIsSubmitting(false);
-      setUploadProgress(0);
+        const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_API_KEY}`);
+        const data = await res.json();
+        
+        if (data.status === "OK" && data.results.length > 0) {
+            const cleanAddress = parseCleanAddress(data.results);
+            setLiveAddress(cleanAddress);
+        } else {
+            setLiveAddress("Location not found");
+        }
+    } catch (e) {
+        setLiveAddress("Address lookup failed");
     }
   };
 
-  const getButtonText = () => {
-    if (isSubmitting) {
-      if (uploadProgress > 0 && uploadProgress < 100) {
-        return `Uploading... ${uploadProgress}%`;
+  const handleManualSearch = async (text) => {
+      if (!text) return;
+      setListVisible(false);
+      Keyboard.dismiss();
+      try {
+          const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(text)}&components=country:pk&key=${GOOGLE_API_KEY}`;
+          const res = await fetch(url);
+          const data = await res.json();
+
+          if (data.status === "OK" && data.results.length > 0) {
+              const { lat, lng } = data.results[0].geometry.location;
+              mapRef.current?.animateToRegion({
+                  latitude: lat, longitude: lng, latitudeDelta: 0.002, longitudeDelta: 0.002
+              }, 1000);
+          } else {
+              Alert.alert("Not Found", "Try adding 'Lahore' or 'Pakistan' to your search.");
+          }
+      } catch (error) {
+          console.error(error);
       }
-      return 'Submitting...';
+  };
+
+  const handleCurrentLocation = async () => {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+      
+      setLiveAddress("Fetching detailed location...");
+      let location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.BestForNavigation });
+
+      if (location) {
+          const { latitude, longitude } = location.coords;
+          mapRef.current?.animateToRegion({
+              latitude, longitude, latitudeDelta: 0.002, longitudeDelta: 0.002
+          }, 1000);
+          fetchAddress(latitude, longitude);
+      }
+  };
+
+  const confirmLocation = () => {
+      const { latitude, longitude } = currentRegion;
+      setLocationCoords({ latitude, longitude });
+      setFullAddress(liveAddress);
+      
+      // Map ka address form me set ho raha hai (User baad me edit kar sakta hai)
+      setFormData(prev => ({ ...prev, arenaAddress: liveAddress }));
+      setMapModalVisible(false);
+  };
+
+  const pickImage = async (type) => {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'], allowsEditing: true, aspect: type === 'thumbnail' ? [16, 9] : [4, 3], quality: 0.6,
+    });
+    if (!result.canceled) {
+        type === 'thumbnail' ? setThumbnailImage(result.assets[0].uri) : setDocumentImage(result.assets[0].uri);
     }
-    return 'Submit Arena for Approval';
+  };
+
+  const uploadImage = async (uri, name) => {
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      const fileRef = ref(storage, `arenas/${user.uid}/${name}_${Date.now()}`);
+      const uploadTask = uploadBytesResumable(fileRef, blob);
+      return new Promise((resolve, reject) => {
+          uploadTask.on('state_changed', null, reject, async () => {
+              resolve(await getDownloadURL(uploadTask.snapshot.ref));
+          });
+      });
+  };
+
+  const handleSubmit = async () => {
+      if (!formData.arenaName || !locationCoords || !thumbnailImage || !documentImage) {
+          Alert.alert("Missing Info", "Please fill all fields and upload images.");
+          return;
+      }
+      setIsSubmitting(true);
+      try {
+          const tUrl = await uploadImage(thumbnailImage, 'thumbnail');
+          const dUrl = await uploadImage(documentImage, 'document');
+
+          // --- Create Data Object ---
+          const newArenaData = {
+              arenaName: formData.arenaName, 
+              arenaAddress: formData.arenaAddress, 
+              fullAddress,
+              arenaImageUrl: tUrl, 
+              arenaDocumentUrl: dUrl, 
+              location: locationCoords,
+              status: 'pending', 
+              updatedAt: serverTimestamp(),
+          };
+
+          // --- Save to Firestore ---
+          await updateDoc(doc(db, 'users', user.uid), newArenaData);
+          
+          // --- FIX IS HERE: Pass 'newArenaData' back to parent so it doesn't crash ---
+          onRegistrationSuccess(newArenaData);
+
+      } catch (e) {
+          Alert.alert("Error", e.message);
+          console.error(e);
+      } finally {
+          setIsSubmitting(false);
+      }
   };
 
   return (
-    <ScrollView contentContainerStyle={tw`p-6 pb-20`}>
-      <Text style={tw`text-3xl font-bold text-gray-800 mb-2`}>
-        Register Your Arena
-      </Text>
-      <Text style={tw`text-sm text-gray-500 mb-6`}>
-        Provide valid details and documents. Once approved by Admin, your arena will go live.
-      </Text>
-      
-      {/* --- Fields --- */}
-      <Text style={tw`text-lg font-semibold mb-2 text-gray-700`}>Arena Name</Text>
-      <TextInput
-        style={tw`border border-gray-300 p-4 rounded-lg mb-4 text-base bg-white`}
-        placeholder="e.g., Goals Arena"
-        value={formData.arenaName}
-        onChangeText={(val) => handleInputChange('arenaName', val)}
-      />
-      
-      <Text style={tw`text-lg font-semibold mb-2 text-gray-700`}>Arena Full Address</Text>
-      <TextInput
-        style={tw`border border-gray-300 p-4 rounded-lg mb-4 text-base bg-white`}
-        placeholder="e.g., 123-B, Johar Town, Lahore"
-        value={formData.arenaAddress}
-        onChangeText={(val) => handleInputChange('arenaAddress', val)}
-      />
-      
-      {/* --- Thumbnail Image Section --- */}
-      <Text style={tw`text-lg font-semibold mb-2 text-gray-700`}>Arena Thumbnail</Text>
-      <Text style={tw`text-xs text-gray-500 mb-2`}>This image will be shown to players.</Text>
-      
-      {thumbnailImage ? (
-        <View style={tw`mb-3`}>
-          <Image source={{ uri: thumbnailImage }} style={tw`w-full h-48 rounded-lg mb-2`} resizeMode="cover" />
-          <Pressable onPress={() => pickImage('thumbnail')}>
-            <Text style={tw`text-blue-600 text-center font-bold`}>Change Image</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <Pressable 
-          onPress={() => pickImage('thumbnail')} 
-          style={tw`mb-6 border-2 border-dashed border-gray-300 bg-gray-50 p-6 rounded-lg items-center`}
-        > 
-           <Text style={tw`text-gray-500 font-semibold`}>+ Pick Cover Image</Text>
-        </Pressable>
-      )}
+    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={tw`flex-1 bg-white`}>
+      <ScrollView contentContainerStyle={tw`p-5`}>
+        <Text style={tw`text-2xl font-bold text-gray-800 mb-6`}>Register Arena</Text>
+        
+        {/* --- Arena Name --- */}
+        <Text style={tw`text-gray-500 text-xs font-bold uppercase mb-2`}>Arena Name</Text>
+        <TextInput 
+            value={formData.arenaName} 
+            onChangeText={t => setFormData({...formData, arenaName: t})}
+            style={tw`bg-gray-50 border border-gray-200 p-4 rounded-xl mb-4 text-base`}
+            placeholder="e.g. Spartan Turf"
+        />
 
-      {/* --- Document Image Section --- */}
-      <Text style={tw`text-lg font-semibold mb-2 text-gray-700`}>Official Document</Text>
-      <Text style={tw`text-xs text-gray-500 mb-2`}>
-        Upload valid proof (Registry/Ownership) for Admin verification. (Max 5MB)
-      </Text>
-      
-      {documentImage ? (
-        <View style={tw`mb-3`}>
-          <Image source={{ uri: documentImage }} style={tw`w-full h-64 rounded-lg mb-2 border border-gray-200`} resizeMode="contain" />
-          <Pressable onPress={() => pickImage('document')}>
-            <Text style={tw`text-blue-600 text-center font-bold`}>Change Document</Text>
-          </Pressable>
+        {/* --- Location Section (FIXED DESIGN) --- */}
+        <Text style={tw`text-gray-500 text-xs font-bold uppercase mb-2`}>Location</Text>
+        <View style={tw`flex-row items-center bg-gray-50 border border-gray-200 rounded-xl mb-6`}>
+            {/* Editable Field */}
+            <TextInput
+                value={formData.arenaAddress}
+                onChangeText={(text) => setFormData({ ...formData, arenaAddress: text })}
+                style={tw`flex-1 p-4 text-base text-gray-800`}
+                placeholder="Type address or use map button -->"
+            />
+            
+            {/* Divider Line */}
+            <View style={tw`h-8 w-[1px] bg-gray-300`} />
+
+            {/* Map Button (Icon) */}
+            <Pressable 
+                onPress={() => setMapModalVisible(true)} 
+                style={tw`p-4`}
+            >
+                <Ionicons name="map" size={24} color="#EA4335" />
+            </Pressable>
         </View>
-      ) : (
-        <Pressable 
-          onPress={() => pickImage('document')} 
-          style={tw`mb-8 border-2 border-dashed border-blue-200 bg-blue-50 p-6 rounded-lg items-center`}
-        > 
-           <Text style={tw`text-blue-500 font-semibold`}>+ Upload Valid Document</Text>
+
+
+        {/* --- Images --- */}
+        <Text style={tw`text-gray-500 text-xs font-bold uppercase mb-2`}>Cover Photo</Text>
+        <Pressable onPress={() => pickImage('thumbnail')} style={tw`h-40 bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl mb-4 justify-center items-center overflow-hidden`}>
+            {thumbnailImage ? <Image source={{uri: thumbnailImage}} style={tw`w-full h-full`} /> : <Ionicons name="image" size={30} color="gray" />}
         </Pressable>
-      )}
-      
-      {/* --- Submit Button --- */}
-      <Pressable
-        style={tw.style(
-          `bg-green-600 py-4 rounded-lg shadow-md`,
-          isSubmitting && `bg-green-400`
-        )}
-        onPress={handleRegisterArena}
-        disabled={isSubmitting}
-      >
-        {isSubmitting ? (
-          <ActivityIndicator color={tw.color('white')} />
-        ) : (
-          <Text style={tw`text-white text-center text-lg font-bold`}>
-            {getButtonText()}
-          </Text>
-        )}
-      </Pressable>
-    </ScrollView>
+        
+        <Text style={tw`text-gray-500 text-xs font-bold uppercase mb-2`}>Official Document</Text>
+        <Pressable onPress={() => pickImage('document')} style={tw`h-16 bg-blue-50 border border-blue-100 rounded-xl mb-8 justify-center items-center flex-row`}>
+            {documentImage ? <Text style={tw`text-blue-700 font-bold`}>Doc Selected ✅</Text> : <Text style={tw`text-blue-600 font-semibold`}>Upload License/Proof</Text>}
+        </Pressable>
+        
+        <Pressable onPress={handleSubmit} disabled={isSubmitting} style={tw`bg-black py-4 rounded-xl`}>
+            {isSubmitting ? <ActivityIndicator color="white" /> : <Text style={tw`text-white text-center font-bold text-lg`}>Submit Application</Text>}
+        </Pressable>
+      </ScrollView>
+
+      {/* ================= MAP MODAL ================= */}
+      <Modal visible={mapModalVisible} animationType="slide" onRequestClose={() => setMapModalVisible(false)}>
+          <SafeAreaView style={tw`flex-1 bg-white relative`}>
+              
+              <View style={tw`absolute top-12 left-5 right-5 z-50 flex-row items-start`}>
+                  <Pressable 
+                    onPress={() => setMapModalVisible(false)} 
+                    style={tw`mt-1 mr-3 bg-white w-10 h-10 rounded-full justify-center items-center shadow-md elevation-5`}
+                  >
+                      <Ionicons name="arrow-back" size={22} color="black" />
+                  </Pressable>
+                  
+                  <View style={tw`flex-1 shadow-xl`}>
+                    <GooglePlacesAutocomplete
+                        ref={googlePlacesRef}
+                        placeholder="Search Area / Block..."
+                        fetchDetails={true}
+                        debounce={300}
+                        minLength={2}
+                        listViewDisplayed={listVisible ? 'auto' : false}
+                        query={{ 
+                            key: GOOGLE_API_KEY, language: 'en', components: 'country:pk', 
+                            location: `${currentRegion.latitude},${currentRegion.longitude}`, radius: 5000, 
+                        }}
+                        onPress={(data, details = null) => {
+                            const { lat, lng } = details.geometry.location;
+                            mapRef.current?.animateToRegion({ latitude: lat, longitude: lng, latitudeDelta: 0.002, longitudeDelta: 0.002 }, 1000);
+                            setListVisible(false);
+                            Keyboard.dismiss();
+                        }}
+                        textInputProps={{
+                            returnKeyType: "search",
+                            onFocus: () => setListVisible(true),
+                            onChangeText: () => setListVisible(true),
+                            onSubmitEditing: (e) => handleManualSearch(e.nativeEvent.text),
+                        }}
+                        styles={{
+                            container: { flex: 0 },
+                            textInputContainer: tw`bg-white rounded-full h-12 border border-gray-100 pl-2 pr-1 shadow-sm`,
+                            textInput: tw`h-12 bg-transparent text-gray-800 text-base font-medium`,
+                            listView: { backgroundColor: 'white', marginTop: 8, borderRadius: 10, elevation: 15, zIndex: 1000 },
+                        }}
+                        enablePoweredByContainer={false}
+                    />
+                  </View>
+              </View>
+
+              <MapView
+                ref={mapRef}
+                style={tw`flex-1`}
+                provider={PROVIDER_GOOGLE}
+                initialRegion={currentRegion}
+                onPress={() => { Keyboard.dismiss(); setListVisible(false); googlePlacesRef.current?.blur(); }} 
+                onPanDrag={() => { Keyboard.dismiss(); setListVisible(false); }} 
+                onRegionChange={() => !isMapMoving && setIsMapMoving(true)}
+                onRegionChangeComplete={(region) => {
+                    setIsMapMoving(false);
+                    setCurrentRegion(region); 
+                    fetchAddress(region.latitude, region.longitude);
+                }}
+              />
+              
+              <View style={tw`absolute top-0 bottom-0 left-0 right-0 justify-center items-center pointer-events-none`}>
+                  <View style={tw`z-10 ${isMapMoving ? '-mt-10' : '-mt-5'}`}>
+                      <MaterialCommunityIcons name="map-marker" size={50} color="#EA4335" />
+                  </View>
+                  <View style={tw`bg-black rounded-full absolute mt-1 ${isMapMoving ? 'w-2 h-2 opacity-10' : 'w-4 h-4 opacity-20'}`} />
+              </View>
+
+              <View style={tw`absolute bottom-0 left-0 right-0`}>
+                  <View style={tw`items-end px-5 mb-4`}>
+                    <Pressable onPress={handleCurrentLocation} style={tw`bg-white w-12 h-12 rounded-full justify-center items-center shadow-lg elevation-5 border border-gray-100`}>
+                        <MaterialIcons name="my-location" size={24} color="#2563EB" />
+                    </Pressable>
+                  </View>
+                  <View style={tw`bg-white p-6 mb-5 rounded-t-3xl shadow-2xl elevation-20`}>
+                      <View style={tw`w-12 h-1 bg-gray-300 rounded-full self-center mb-4`} />
+                      <Text style={tw`text-xs font-bold text-gray-400 uppercase tracking-wide`}>Selected Location</Text>
+                      <Text style={tw`text-lg font-bold text-gray-900 mt-1 mb-6 leading-6`} numberOfLines={3} ellipsizeMode="tail">
+                          {isMapMoving ? "Locating..." : liveAddress}
+                      </Text>
+                      <Pressable onPress={confirmLocation} disabled={isMapMoving} style={tw.style(`py-4 rounded-xl items-center shadow-md`, isMapMoving ? 'bg-gray-300' : 'bg-red-600')}>
+                          <Text style={tw`text-white font-bold text-lg`}>Confirm Location</Text>
+                      </Pressable>
+                  </View>
+              </View>
+
+          </SafeAreaView>
+      </Modal>
+    </KeyboardAvoidingView>
   );
 }

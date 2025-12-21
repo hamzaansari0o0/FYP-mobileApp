@@ -1,9 +1,9 @@
-import React from 'react';
-import { View, Text, Pressable, ImageBackground } from 'react-native';
-import { Link } from 'expo-router';
-import tw from 'twrnc';
 import { Ionicons } from '@expo/vector-icons';
+import { Link } from 'expo-router';
 import moment from 'moment';
+import React from 'react';
+import { ImageBackground, Pressable, Text, View } from 'react-native';
+import tw from 'twrnc';
 
 // === 1. NAYA COMPONENT: Status Badge ===
 const StatusBadge = ({ status }) => {
@@ -36,7 +36,7 @@ export default function TournamentCard({ tournament }) {
   // Arena ki default image
   const arenaImage = tournament.arenaImageUrl
     ? { uri: tournament.arenaImageUrl }
-    : require('../../assets/images/hero-image.png'); // Default image
+    : require('../../assets/images/tournament-futsal-image-3.jpg'); // Default image
 
   return (
     // Link (waisa hi)

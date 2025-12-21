@@ -1,11 +1,13 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, FlatList, Pressable, Alert, ActivityIndicator } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { collection, doc, getDocs, query, updateDoc, where } from 'firebase/firestore';
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
 import { db } from '../../../../firebase/firebaseConfig';
-import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
-import { useFocusEffect, useRouter, useLocalSearchParams, Stack } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+// 🔥 Notification Helper Import
+import { notifyUser } from '../../../../utils/notifications';
 
 // --- Header Component ---
 const AdminHeader = ({ title, onBack }) => (
@@ -43,7 +45,8 @@ const CourtManageCard = ({ court, onDisable, onEnable }) => {
       <View style={tw`flex-row justify-end mt-3 border-t border-gray-100 pt-3`}>
          <Pressable
           style={tw`py-2 px-4 rounded-lg ${isEnabled ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}
-          onPress={() => isEnabled ? onDisable(court.id) : onEnable(court.id)}
+          // Pure court object pass kar rahe hain notification ke liye
+          onPress={() => isEnabled ? onDisable(court) : onEnable(court)}
         >
           <Text style={tw`font-bold text-sm ${isEnabled ? 'text-red-700' : 'text-green-700'}`}>
             {isEnabled ? 'Disable Court' : 'Enable Court'}
@@ -70,7 +73,6 @@ export default function ArenaCourtsScreen() {
   const fetchCourts = async () => {
     setLoading(true);
     try {
-      // Us owner ke courts layen
       const q = query(
         collection(db, 'courts'),
         where('ownerId', '==', ownerId)
@@ -86,20 +88,30 @@ export default function ArenaCourtsScreen() {
     }
   };
 
-  // Disable Logic
-  const handleDisable = async (id) => {
+  // --- 🛡️ Disable Logic ---
+  const handleDisable = async (court) => {
     Alert.alert(
       "Disable Court?",
-      "Players won't be able to see or book this court.",
+      `Players won't be able to see or book '${court.courtName}'.`,
       [
         { text: "Cancel", style: "cancel" },
         { 
           text: "Disable", style: "destructive", 
           onPress: async () => {
             try {
-              await updateDoc(doc(db, 'courts', id), { status: 'disabled' });
-              setCourts(prev => prev.map(c => c.id === id ? { ...c, status: 'disabled' } : c));
-              Alert.alert("Success", "Court disabled.");
+              await updateDoc(doc(db, 'courts', court.id), { status: 'disabled' });
+              
+              // 🔥 Notify Owner
+              await notifyUser(
+                ownerId,
+                "Court Offline 🔴",
+                `Administrative Update: Your court '${court.courtName}' has been disabled and hidden from players.`,
+                "alert",
+                { url: '/(owner)/myCourt' }
+              );
+
+              setCourts(prev => prev.map(c => c.id === court.id ? { ...c, status: 'disabled' } : c));
+              Alert.alert("Success", "Court disabled & owner notified.");
             } catch (err) {
               Alert.alert("Error", "Failed to update.");
             }
@@ -109,12 +121,22 @@ export default function ArenaCourtsScreen() {
     );
   };
 
-  // Enable Logic
-  const handleEnable = async (id) => {
+  // --- ✅ Enable Logic ---
+  const handleEnable = async (court) => {
     try {
-      await updateDoc(doc(db, 'courts', id), { status: 'approved' });
-      setCourts(prev => prev.map(c => c.id === id ? { ...c, status: 'approved' } : c));
-      Alert.alert("Success", "Court enabled.");
+      await updateDoc(doc(db, 'courts', court.id), { status: 'approved' });
+      
+      // 🔥 Notify Owner
+      await notifyUser(
+        ownerId,
+        "Court Online 🟢",
+        `Great news! Your court '${court.courtName}' has been enabled and is now open for bookings.`,
+        "booking",
+        { url: '/(owner)/myCourt' }
+      );
+
+      setCourts(prev => prev.map(c => c.id === court.id ? { ...c, status: 'approved' } : c));
+      Alert.alert("Success", "Court enabled & owner notified.");
     } catch (err) {
       Alert.alert("Error", "Failed to update.");
     }

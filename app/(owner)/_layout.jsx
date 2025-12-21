@@ -1,7 +1,6 @@
-import React from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import tw from 'twrnc';
-import { Ionicons } from '@expo/vector-icons';
 
 export default function OwnerLayout() {
   return (
@@ -10,7 +9,7 @@ export default function OwnerLayout() {
         headerShown: false,
         tabBarActiveTintColor: tw.color('green-600'),
         tabBarInactiveTintColor: tw.color('gray-400'),
-        tabBarStyle: tw`bg-white border-t border-gray-200 pt-2`,
+        tabBarStyle: tw`bg-white border-t border-gray-200 `,
         tabBarLabelStyle: tw`text-xs font-medium mb-1`,
       }}
     >
@@ -25,13 +24,12 @@ export default function OwnerLayout() {
         }}
       />
       
-      {/* 2. My Court (Naam aur Icon theek kar diya) */}
+      {/* 2. My Court */}
       <Tabs.Screen
-        name="myCourt" // <-- Naam 'myCourt' kar diya (folder se match karne ke liye)
+        name="myCourt" 
         options={{
-          title: 'My Arena', // Title abhi bhi 'My Arena' rakha hai
+          title: 'My Arena', 
           tabBarIcon: ({ color, size, focused }) => (
-            // Icon 'football' kar diya
             <Ionicons name={focused ? 'football' : 'football-outline'} size={size} color={color} />
           ),
         }}
@@ -48,7 +46,7 @@ export default function OwnerLayout() {
         }}
       />
       
-      {/* 4. Profile (Aakhri tab) */}
+      {/* 4. Profile */}
       <Tabs.Screen
         name="profile"
         options={{
@@ -56,6 +54,16 @@ export default function OwnerLayout() {
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons name={focused ? 'person' : 'person-outline'} size={size} color={color} />
           ),
+        }}
+      />
+
+      {/* 5. Notifications (Hidden Tab) */}
+      <Tabs.Screen
+        name="notifications"
+        options={{
+          // 'href: null' tab bar se button hata deta hai, 
+          // par navigation ke liye screen available rehti hai.
+          href: null, 
         }}
       />
     </Tabs>

@@ -1,18 +1,23 @@
-import React, { useState, useCallback, useMemo } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import { Stack, useFocusEffect, useRouter } from "expo-router";
+import { collection, getDocs, limit, query, where } from "firebase/firestore";
+import { useCallback, useMemo, useState } from "react";
 import {
-  View, Text, ActivityIndicator,
-  TextInput, ScrollView, Pressable, StatusBar, Image
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StatusBar,
+  Text,
+  TextInput,
+  View
 } from "react-native";
 import tw from "twrnc";
 import { db } from "../../../firebase/firebaseConfig";
-import { collection, query, where, getDocs, limit } from "firebase/firestore";
-import { useFocusEffect, useRouter, Stack } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
 
 // --- IMPORTS ---
-import HeroSection from "../../../components/specific/home/HeroSection"; 
-import ArenaCard from "../../../components/specific/ArenaCard.jsx"; 
-import HomeHeader from "../../../components/specific/home/HomeHeader"; 
+import ArenaCard from "../../../components/specific/ArenaCard.jsx";
+import HeroSection from "../../../components/specific/home/HeroSection";
+import HomeHeader from "../../../components/specific/home/HomeHeader";
 
 export default function PlayerHome() {
   const router = useRouter();
@@ -55,76 +60,84 @@ export default function PlayerHome() {
   }, [searchQuery, arenas]);
 
   return (
-    <View style={tw`flex-1 bg-white`}>
+    <View style={tw`flex-1 bg-gray-50`}>
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       
       {/* 1. Navbar */}
       <HomeHeader />
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={tw`pb-24`}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={tw`pb-32`}>
         
-        {/* 2. Welcome & Search (Isme Padding hai) */}
-        <View style={tw`px-4 pt-2 pb-4 bg-white`}>
-          <Text style={tw`text-gray-500 text-xs font-medium -mt-1`}>Welcome Player 👋</Text>
-          <Text style={tw`text-xl font-bold text-gray-900`}>
-            Find Your <Text style={tw`text-green-600`}>Game</Text>
-          </Text>
+        {/* 2. Welcome & Search Section (White Background with Curves) */}
+        <View style={tw`bg-white px-5 pt-3 pb-6 rounded-b-3xl shadow-sm z-10`}>
+          
+          {/* Greeting Text */}
+          <View style={tw`mb-4`}>
+            <Text style={tw`text-gray-400 text-xs font-bold uppercase tracking-widest`}>
+              Welcome Player 👋
+            </Text>
+            <Text style={tw`text-2xl font-black text-gray-900 mt-1`}>
+              Find Your <Text style={tw`text-green-600`}>Game</Text>
+            </Text>
+          </View>
 
-          {/* Search Bar */}
-          <View style={tw`flex-row items-center bg-gray-100 px-3 py-2 rounded-lg mt-3 border border-gray-200`}>
-            <Ionicons name="search" size={18} color={tw.color('gray-400')} />
+          {/* Improved Search Bar */}
+          <View style={tw`flex-row items-center bg-gray-50 px-4 py-3 rounded-2xl border border-gray-200`}>
+            <Ionicons name="search" size={20} color={tw.color('gray-400')} />
             <TextInput
-              style={tw`flex-1 ml-2 text-sm text-gray-800`}
-              placeholder="Search courts..."
+              style={tw`flex-1 ml-3 text-base text-gray-800 font-medium`}
+              placeholder="Search courts, areas..."
               placeholderTextColor={tw.color('gray-400')}
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
             {searchQuery.length > 0 && (
                <Pressable onPress={() => setSearchQuery('')}>
-                  <Ionicons name="close-circle" size={16} color={tw.color('gray-400')} />
+                  <Ionicons name="close-circle" size={20} color={tw.color('gray-400')} />
                </Pressable>
             )}
           </View>
         </View>
 
-        {/* 3. HERO SECTION (Full Width - Padding ke bahar) */}
-        {/* Sirf tab dikhayein jab search na ho raha ho */}
+        {/* 3. HERO SECTION */}
+        {/* Thoda margin-top diya hai taake search bar se chipka hua na lage */}
         {!searchQuery && (
-          <View style={tw`mb-6`}> 
-             {/* Yahan koi px-4 padding nahi hai, isliye full width aayega */}
+          <View style={tw`mt-5 mb-2`}> 
              <HeroSection /> 
           </View>
         )}
 
-        {/* 4. List Header (Padding wapas) */}
-        <View style={tw`flex-row justify-between items-end px-4 mb-3`}>
+        {/* 4. List Header */}
+        <View style={tw`flex-row justify-between items-center px-5 mb-3 mt-4`}>
           <Text style={tw`text-lg font-bold text-gray-800`}>
-            {searchQuery ? "Results" : "Popular Arenas"}
+            {searchQuery ? "Search Results" : "Popular Arenas"}
           </Text>
           {!searchQuery && (
-            <Pressable onPress={() => router.push('/(player)/home/allOwners')}>
-              <Text style={tw`text-xs font-bold text-green-600`}>See All</Text>
+            <Pressable 
+              onPress={() => router.push('/(player)/home/allOwners')}
+              style={tw`bg-green-50 px-3 py-1.5 rounded-full`}
+            >
+              <Text style={tw`text-xs font-bold text-green-700`}>See All</Text>
             </Pressable>
           )}
         </View>
 
-        {/* 5. List Content (Padding ke sath) */}
+        {/* 5. List Content */}
         {loading ? (
           <ActivityIndicator size="large" color={tw.color("green-600")} style={tw`mt-10`} />
         ) : (
-          <View style={tw`px-4`}>
+          <View style={tw`px-5`}>
             {filteredArenas.length > 0 ? (
               filteredArenas.map((item) => (
-                <View key={item.id} style={tw`mb-3`}>
+                <View key={item.id} style={tw`mb-4`}>
                   <ArenaCard arena={item} />
                 </View>
               ))
             ) : (
-              <View style={tw`items-center justify-center mt-5 py-8 bg-gray-50 rounded-lg`}>
-                <Ionicons name="search-outline" size={30} color={tw.color('gray-300')} />
-                <Text style={tw`text-gray-400 text-sm mt-2`}>No arenas found</Text>
+              <View style={tw`items-center justify-center mt-10 py-10 bg-white rounded-2xl border border-gray-100 border-dashed mx-5`}>
+                <Ionicons name="search-outline" size={40} color={tw.color('gray-300')} />
+                <Text style={tw`text-gray-400 text-sm mt-3 font-medium`}>No arenas found</Text>
               </View>
             )}
           </View>

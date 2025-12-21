@@ -1,24 +1,35 @@
-import React from 'react';
+import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
-import { useRouter } from 'expo-router';
-// Humara banaya hua form component
-import TournamentRegistrationForm from '../../../components/specific/TournamentRegistrationForm'; 
+import TournamentRegistrationForm from '../../../components/specific/TournamentRegistrationForm';
+import { notifyAllPlayers } from '../../../utils/notifications'; // Import Notification Helper
 
 export default function CreateTournamentScreen() {
   const router = useRouter();
 
   // Jab naya tournament ban jaye
-  const handleSuccess = () => {
+  const handleSuccess = async (newId, newData) => {
+    console.log("🏆 Tournament Created:", newId);
+
+    // 🔥 NOTIFY ALL PLAYERS: New Tournament
+    if (newData && newData.tournamentName) {
+      try {
+        await notifyAllPlayers(
+          "New Tournament Alert! 🏆",
+          `Registration is now open for ${newData.tournamentName}. Join now!`,
+          { url: '/(player)/tournaments' } // Link to player tournament list
+        );
+        console.log("✅ Broadcast notification sent to all players.");
+      } catch (error) {
+        console.error("❌ Failed to send broadcast:", error);
+      }
+    }
+
     router.back(); // Form (modal) ko band karein
   };
 
   return (
     <SafeAreaView style={tw`flex-1 bg-gray-100`}>
-      {/* === YAHAN TABDEELI KI GAYI HAI ===
-        Prop ka naam 'onRegistrationSuccess' se badal kar 'onSuccess' kar diya gaya hai.
-        Ab yeh TournamentRegistrationForm.jsx ke andar 'onSuccess()' function ko call karega.
-      */}
       <TournamentRegistrationForm 
         onSuccess={handleSuccess} 
       />

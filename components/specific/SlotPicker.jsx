@@ -1,206 +1,273 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, Pressable, ActivityIndicator, Alert, FlatList } from 'react-native';
-import tw from 'twrnc';
-import { Calendar } from 'react-native-calendars';
-import { db } from '../../firebase/firebaseConfig';
-import { doc, getDoc } from 'firebase/firestore'; 
-import { useAuth } from '../../context/AuthContext';
-import moment from 'moment'; 
-import { Ionicons } from '@expo/vector-icons'; 
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { doc, getDoc } from "firebase/firestore";
+import moment from "moment";
+import React, { useEffect, useState } from "react";
+import {
+  FlatList,
+  Modal,
+  Pressable,
+  Text,
+  View,
+} from "react-native";
+import { Calendar } from "react-native-calendars";
+import tw from "twrnc";
+import { useAuth } from "../../context/AuthContext";
+import { db } from "../../firebase/firebaseConfig";
 
-// Helper function: Today ki date string
-const getTodayString = () => {
-  return moment().format('YYYY-MM-DD');
-};
+// --- Skeleton Component (Slightly smaller) ---
+const SkeletonSlot = () => (
+  <View style={tw`w-[31%] h-12 bg-gray-200 rounded-lg mb-2 mx-[1%] animate-pulse`} />
+);
 
-// Helper function: 24-hour slots generate karna
-const generateTimeSlots = (existingSlotsMap = {}, dateStr) => {
-  const slotsArray = [];
+export default function SlotPicker({
+  courtId,
+  onSlotsChange,
+  refreshKey,
+}) {
+  const { user } = useAuth();
   
-  let currentMoment = moment(dateStr, 'YYYY-MM-DD').hour(0).minute(0).seconds(0).milliseconds(0);
-  let endMoment = currentMoment.clone().add(1, 'days');
-  
-  while (currentMoment.isBefore(endMoment)) {
-    const hourKey = currentMoment.format('HH'); 
-    const status = existingSlotsMap[hourKey] || 'available';
-    const slotDateTime = currentMoment.clone(); 
-    
-    slotsArray.push({
-      hour: hourKey,
-      timeDisplay: currentMoment.format('h:00 A'), 
-      status: status,
-      slotDateTime: slotDateTime, 
-    });
-    
-    currentMoment.add(1, 'hours');
-  }
-  return slotsArray;
-};
-
-
-// --- SlotPicker Component Shuru ---
-export default function SlotPicker({ 
-  courtId, 
-  pricePerHour, 
-  onSlotSelect, 
-  refreshKey 
-}) { 
-  const { user } = useAuth(); 
-  const [selectedDate, setSelectedDate] = useState(getTodayString());
+  const [selectedDate, setSelectedDate] = useState(moment());
   const [slots, setSlots] = useState([]);
   const [loadingSlots, setLoadingSlots] = useState(true);
+  const [selectedSlotIds, setSelectedSlotIds] = useState([]); 
+  const [showCalendar, setShowCalendar] = useState(false);
+
+  const datesList = Array.from({ length: 14 }, (_, i) => moment().add(i, "days"));
 
   useEffect(() => {
     fetchSlots(selectedDate);
-  }, [selectedDate, courtId, user, refreshKey]); 
+  }, [selectedDate, courtId, refreshKey]);
 
-  const fetchSlots = async (dateStr) => {
-    if (!user) {
-        setSlots([]); 
-        setLoadingSlots(false);
-        return;
-    }
-    
+  const fetchSlots = async (dateMoment) => {
     setLoadingSlots(true);
     setSlots([]);
+    setSelectedSlotIds([]); 
+    onSlotsChange([]); 
+
+    const dateStr = dateMoment.format("YYYY-MM-DD");
+
     try {
-      const docId = `${courtId}_${dateStr}`; 
-      const slotDocRef = doc(db, 'court_slots', docId);
+      const docId = `${courtId}_${dateStr}`;
+      const slotDocRef = doc(db, "court_slots", docId);
       const docSnap = await getDoc(slotDocRef);
-      let daySlotsMap = {};
+      
+      let existingSlotsMap = {};
       if (docSnap.exists()) {
-        daySlotsMap = docSnap.data().slots;
+        existingSlotsMap = docSnap.data().slots || {};
       }
-      
-      const slotsArray = generateTimeSlots(daySlotsMap, dateStr); 
+
+      const slotsArray = [];
+      for (let i = 0; i < 24; i++) {
+        const hourKey = i < 10 ? `0${i}` : `${i}`;
+        const timeMoment = moment(dateStr).hour(i).minute(0);
+        
+        const isPast = moment().isAfter(timeMoment) && moment().isSame(timeMoment, 'day');
+        let status = existingSlotsMap[hourKey] || "available";
+        if (isPast) status = "expired";
+
+        slotsArray.push({
+            id: hourKey,
+            hour: i,
+            timeDisplay: timeMoment.format("h:00 A"),
+            status: status, 
+            fullDate: timeMoment.toDate(),
+            dateStr: dateStr 
+        });
+      }
       setSlots(slotsArray);
-      
     } catch (error) {
-      console.error("Error fetching slots: ", error);
-      Alert.alert('Error', 'Could not fetch time slots.');
+      console.error("Error fetching slots:", error);
     } finally {
       setLoadingSlots(false);
     }
   };
 
-  // --- RENDER SLOT FUNCTION (UPDATED) ---
-  const renderSlot = ({ item }) => {
-    const currentUserId = user?.uid; 
-    
-    // 1. Tamam possible states ko define karein
-    const isAvailable = item.status === 'available';
-    const isBookedByMe = currentUserId ? item.status === currentUserId : false; 
-    const isUnavailable = item.status === 'unavailable'; // <-- NAYI STATE
-    
-    // 2. Past slot check karein
-    const isToday = selectedDate === getTodayString();
-    const slotTime = item.slotDateTime; 
-    const isPastSlot = isToday && slotTime.isBefore(moment()); 
-
-    // 3. Icons
-    const hourInt = parseInt(item.hour);
-    const isDay = hourInt >= 6 && hourInt < 18;
-    const iconName = isDay ? 'sunny-outline' : 'moon-outline';
-    const iconColor = isDay ? tw.color('orange-500') : tw.color('purple-500');
-    
-    // 4. Disable logic update karein
-    // Slot disable hoga agar: User login nahi, Slot available nahi, Waqt guzar gaya, YA Slot unavailable hai
-    const isDisabled = !currentUserId || !isAvailable || isPastSlot || isUnavailable; 
-
-    // --- 5. Style aur Text logic (Priority ke sath) ---
-    let slotStyle = tw`py-3 px-2 w-[30%] items-center rounded-lg border m-1`;
-    let timeColor = tw`text-gray-800`;
-    let statusText = 'Booked'; // Default (agar booked by others hai)
-    let statusColor = tw`text-gray-500`;
-
-    if (isPastSlot) {
-      slotStyle = tw.style(slotStyle, `opacity-50 bg-gray-200 border-gray-300`);
-      timeColor = tw`text-gray-500`;
-      statusText = 'Expired';
-      statusColor = tw`text-red-600`;
-    } else if (isUnavailable) { // <-- NAYA LOGIC
-      slotStyle = tw.style(slotStyle, `bg-red-100 border-red-300`); // Red style
-      timeColor = tw`text-red-700`; // Red time
-      statusText = 'Unavailable'; // Red text
-      statusColor = tw`text-red-700`;
-    } else if (isBookedByMe) {
-      slotStyle = tw.style(slotStyle, `bg-blue-100 border-blue-300`);
-      timeColor = tw`text-blue-800`;
-      statusText = 'You Booked';
-      statusColor = tw`text-blue-600`;
-    } else if (isAvailable) {
-      slotStyle = tw.style(slotStyle, `bg-green-100 border-green-300`);
-      timeColor = tw`text-green-800`;
-      statusText = 'Available';
-      statusColor = tw`text-green-600`;
+  const handlePress = (item) => {
+    if (item.status !== 'available') return;
+    let newSelectedIds;
+    if (selectedSlotIds.includes(item.id)) {
+        newSelectedIds = selectedSlotIds.filter(id => id !== item.id);
     } else {
-      // Booked by others
-      slotStyle = tw.style(slotStyle, `bg-gray-200 border-gray-300`);
-      timeColor = tw`text-gray-500`;
+        newSelectedIds = [...selectedSlotIds, item.id];
     }
-    // ---------------------------------------------------
+    setSelectedSlotIds(newSelectedIds);
+    const selectedObjects = slots.filter(slot => newSelectedIds.includes(slot.id));
+    onSlotsChange(selectedObjects);
+  };
+
+  const renderSlot = ({ item }) => {
+    const isSelected = selectedSlotIds.includes(item.id);
+    const isAvailable = item.status === 'available';
+    const isBooked = item.status !== 'available' && item.status !== 'expired' && item.status !== 'unavailable';
+    const isUnavailable = item.status === 'unavailable';
+    const isExpired = item.status === 'expired';
+    const isNight = item.hour >= 18 || item.hour < 6;
+
+    let iconName = isNight ? "weather-night" : "weather-sunny"; 
+    let iconColor = isNight ? "#4f46e5" : "#f59e0b"; 
+    
+    let bgStyle = `bg-white border-gray-200`;
+    let textStyle = `text-gray-700`;
+    let subTextStyle = `text-gray-400`;
+
+    if (isSelected) {
+        bgStyle = `bg-green-600 border-green-600 shadow-sm`;
+        textStyle = `text-white`;
+        subTextStyle = `text-green-100`;
+        iconName = "check-circle";
+        iconColor = "white";
+    } else if (isBooked) {
+        bgStyle = `bg-gray-100 border-gray-200 opacity-60`;
+        textStyle = `text-gray-400 line-through`;
+        iconColor = "#9ca3af"; 
+        iconName = "lock";
+    } else if (isUnavailable) {
+        bgStyle = `bg-red-50 border-red-100`;
+        textStyle = `text-red-300`;
+        subTextStyle = `text-red-200`;
+        iconName = "close-circle";
+        iconColor = "#fca5a5";
+    } else if (isExpired) {
+        bgStyle = `bg-gray-50 border-gray-100`;
+        textStyle = `text-gray-300`;
+        iconColor = "#e5e7eb";
+    }
 
     return (
       <Pressable
-        style={slotStyle}
-        // Sirf 'available' slots par hi 'onSlotSelect' call hoga
-        onPress={() => isAvailable && !isPastSlot && onSlotSelect(item)} 
-        disabled={isDisabled} 
+        onPress={() => handlePress(item)}
+        disabled={!isAvailable}
+        style={tw.style(
+          `w-[31%] py-2.5 mb-2 rounded-lg border items-center justify-center mx-[1%] shadow-sm`, // Height reduced (py-3 -> py-2.5)
+          bgStyle
+        )}
       >
-        <View style={tw`flex-row items-center mb-1`}>
-            <Ionicons name={iconName} size={14} color={iconColor} style={tw`mr-1`} />
-            <Text style={tw.style(`font-bold text-sm`, timeColor)}>
+        <View style={tw`flex-row items-center mb-0.5`}>
+            {/* Icon Size Reduced (18 -> 14) */}
+            <MaterialCommunityIcons name={iconName} size={14} color={iconColor} style={tw`mr-1`} />
+            
+            {/* Font Size Reduced (text-sm -> text-xs) */}
+            <Text style={tw.style(`font-bold text-xs`, textStyle)}>
                 {item.timeDisplay}
             </Text>
         </View>
-        
-        <Text style={tw.style(`text-xs`, statusColor)}>
-          {statusText}
+
+        {/* Subtext size reduced drastically for cleaner look */}
+        <Text style={tw.style(`text-[9px] capitalize font-bold`, subTextStyle)}>
+           {isSelected ? 'Selected' : isBooked ? 'Booked' : isUnavailable ? 'Closed' : isExpired ? 'Past' : (isNight ? 'Night' : 'Day')}
         </Text>
       </Pressable>
     );
   };
 
   return (
-    <View style={tw`bg-white p-5 rounded-lg shadow-md mt-6`}>
-      <Text style={tw`text-xl font-bold text-gray-800 mb-4`}>Book Your Slot</Text>
+    <View style={tw`mt-2`}>
       
-      <Calendar
-        current={selectedDate}
-        onDayPress={(day) => { setSelectedDate(day.dateString); }}
-        minDate={getTodayString()} 
-        markedDates={{ [selectedDate]: { selected: true, selectedColor: tw.color('blue-600') } }}
-        theme={{
-          todayTextColor: tw.color('blue-600'),
-          arrowColor: tw.color('blue-600'),
-        }}
-      />
-      
-      <View style={tw`mt-5`}>
-        {!user && (
-            <Text style={tw`text-center text-red-500 p-2 border border-red-200 rounded-lg mb-4`}>
-                Please log in to book a slot.
-            </Text>
-        )}
-        
-        {loadingSlots ? (
-          <ActivityIndicator size="large" color={tw.color('gray-400')} style={tw`h-24`} />
-        ) : (
-          <FlatList
-            data={slots}
-            keyExtractor={item => item.hour}
-            renderItem={renderSlot}
-            numColumns={3}
-            columnWrapperStyle={tw`justify-start`}
-            scrollEnabled={false} 
-            ListEmptyComponent={
-              <Text style={tw`text-center text-gray-500 mt-5`}>
-                No slots available on this date.
-              </Text>
-            }
-          />
-        )}
+      {/* --- Date Header (Smaller Fonts) --- */}
+      <View style={tw`flex-row justify-between items-end mb-3`}>
+        <View>
+            {/* text-lg -> text-base */}
+            <Text style={tw`text-gray-900 font-bold text-base`}>Select Date</Text>
+            <Text style={tw`text-gray-500 text-[10px]`}>{selectedDate.format("MMMM YYYY")}</Text>
+        </View>
+        <Pressable 
+            onPress={() => setShowCalendar(true)}
+            style={tw`flex-row items-center bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-100`}
+        >
+            <Text style={tw`text-indigo-600 font-bold text-[10px] mr-1`}>See More</Text>
+            <Ionicons name="calendar" size={10} color={tw.color('indigo-600')} />
+        </Pressable>
       </View>
+
+      {/* Date Strip */}
+      <View style={tw`h-20 mb-4`}>
+        <FlatList
+            horizontal
+            data={datesList}
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={(item) => item.toString()}
+            renderItem={({ item }) => {
+            const isSelected = item.isSame(selectedDate, "day");
+            return (
+                <Pressable
+                onPress={() => setSelectedDate(item)}
+                style={tw.style(
+                    `items-center justify-center w-14 h-18 rounded-xl mr-2 border`, // Box size reduced slightly
+                    isSelected ? `bg-green-700 border-green-700 shadow-sm` : `bg-white border-gray-200`
+                )}
+                >
+                <Text style={tw.style(`text-[10px] uppercase mb-0.5 font-medium`, isSelected ? `text-green-100` : `text-gray-400`)}>
+                    {item.format("ddd")}
+                </Text>
+                {/* Date Number Font Reduced (text-xl -> text-lg) */}
+                <Text style={tw.style(`text-lg font-bold`, isSelected ? `text-white` : `text-gray-800`)}>
+                    {item.format("DD")}
+                </Text>
+                </Pressable>
+            );
+            }}
+        />
+      </View>
+
+      {/* Slots Header */}
+      <View style={tw`mb-2`}>
+        <Text style={tw`text-gray-900 font-bold text-base`}>
+            Available Slots
+        </Text>
+      </View>
+      
+      {!user && (
+        <Text style={tw`text-red-500 bg-red-50 p-2 rounded-lg mb-3 text-center text-xs font-medium`}>
+             Please log in to book.
+        </Text>
+      )}
+
+      {loadingSlots ? (
+        <View style={tw`flex-row flex-wrap justify-between`}>
+          {[1, 2, 3, 4, 5, 6].map((i) => <SkeletonSlot key={i} />)}
+        </View>
+      ) : (
+        <FlatList
+          data={slots}
+          keyExtractor={(item) => item.id}
+          renderItem={renderSlot}
+          numColumns={3}
+          scrollEnabled={false}
+          columnWrapperStyle={tw`justify-start`}
+          ListEmptyComponent={
+              <View style={tw`items-center py-8 w-full`}>
+                <MaterialCommunityIcons name="calendar-remove" size={32} color="#d1d5db" />
+                <Text style={tw`text-center text-gray-400 text-xs mt-1`}>No slots available.</Text>
+              </View>
+          }
+        />
+      )}
+
+      {/* Calendar Modal */}
+      <Modal visible={showCalendar} transparent animationType="fade">
+          <View style={tw`flex-1 bg-black/60 justify-center items-center p-5`}>
+              <View style={tw`bg-white w-full rounded-2xl p-4 shadow-2xl`}>
+                  <View style={tw`flex-row justify-between items-center mb-4`}>
+                      <Text style={tw`text-base font-bold text-gray-800`}>Select Booking Date</Text>
+                      <Pressable onPress={() => setShowCalendar(false)}>
+                          <Ionicons name="close-circle" size={24} color="#9ca3af" />
+                      </Pressable>
+                  </View>
+                  <Calendar
+                    current={selectedDate.format('YYYY-MM-DD')}
+                    minDate={moment().format('YYYY-MM-DD')}
+                    onDayPress={(day) => {
+                        setSelectedDate(moment(day.dateString));
+                        setShowCalendar(false);
+                    }}
+                    markedDates={{
+                        [selectedDate.format('YYYY-MM-DD')]: {selected: true, selectedColor: tw.color('green-600')}
+                    }}
+                  />
+              </View>
+          </View>
+      </Modal>
+
     </View>
   );
 }
