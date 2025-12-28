@@ -29,7 +29,7 @@ My-APP — complete repository file tree (relative paths)
 │  │  ├─ transactions.jsx
 │  │  ├─ dashboard/
 │  │  │  ├─ _layout.jsx
-+│  │  │  ├─ arenas.jsx
+│  │  │  ├─ arenas.jsx
 │  │  │  ├─ courts.jsx
 │  │  │  ├─ index.jsx
 │  │  │  ├─ users.jsx
@@ -87,7 +87,7 @@ My-APP — complete repository file tree (relative paths)
 │     │  └─ about.jsx
 │     └─ schedule/
 │        ├─ _layout.jsx
-+│        └─ matchschedule.jsx
+│        └─ matchschedule.jsx
 ├─ assets/
 │  └─ images/
 │     ├─ android-icon-background.png

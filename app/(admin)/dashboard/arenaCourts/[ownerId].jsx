@@ -1,23 +1,27 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { collection, doc, getDocs, query, updateDoc, where } from 'firebase/firestore';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Pressable, StatusBar, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
 import { db } from '../../../../firebase/firebaseConfig';
-// 🔥 Notification Helper Import
 import { notifyUser } from '../../../../utils/notifications';
 
 // --- Header Component ---
 const AdminHeader = ({ title, onBack }) => (
-  <View style={tw`flex-row items-center mb-5`}>
-    <Pressable onPress={onBack} style={tw`p-2`}>
-      <Ionicons name="arrow-back-outline" size={28} color={tw.color('purple-800')} />
+  <View style={tw`flex-row items-center mb-6 pt-2`}>
+    <Pressable onPress={onBack} style={tw`bg-gray-50 p-2 rounded-xl mr-3 border border-gray-200`}>
+      <Ionicons name="arrow-back" size={20} color="#374151" />
     </Pressable>
-    <Text style={tw`text-2xl font-bold text-purple-800 ml-2 flex-1`} numberOfLines={1}>
-      {title}
-    </Text>
+    <View style={tw`flex-1 flex-row items-center`}>
+        <View style={tw`bg-purple-600 p-2 rounded-lg mr-2`}>
+            <MaterialIcons name="grid-view" size={18} color="white" />
+        </View>
+        <Text style={tw`text-xl font-bold text-gray-900 flex-1`} numberOfLines={1}>
+          {title}
+        </Text>
+    </View>
   </View>
 );
 
@@ -26,17 +30,17 @@ const CourtManageCard = ({ court, onDisable, onEnable }) => {
   const isEnabled = court.status === 'approved';
   
   return (
-    <View style={tw`bg-white p-4 rounded-lg shadow-md mb-4 border border-gray-100`}>
+    <View style={tw`bg-white p-4 rounded-2xl shadow-sm border border-purple-50 mb-3`}>
       <View style={tw`flex-row justify-between items-start`}>
         <View style={tw`flex-1 mr-2`}>
-            <Text style={tw`text-lg font-bold text-gray-800`}>{court.courtName}</Text>
-            <Text style={tw`text-sm text-gray-600`}>Price: Rs. {court.pricePerHour}/hr</Text>
+            <Text style={tw`text-base font-bold text-gray-900`}>{court.courtName}</Text>
+            <Text style={tw`text-[11px] text-gray-500 mt-0.5`}>Price: Rs. {court.pricePerHour}/hr</Text>
         </View>
         
         {/* Status Badge */}
-        <View style={tw`px-2 py-1 rounded self-start ${isEnabled ? 'bg-green-100' : 'bg-red-100'}`}>
-            <Text style={tw`text-xs font-bold ${isEnabled ? 'text-green-700' : 'text-red-700'}`}>
-              {court.status ? court.status.toUpperCase() : 'UNKNOWN'}
+        <View style={tw`px-2 py-1 rounded-md ${isEnabled ? 'bg-green-50' : 'bg-red-50'}`}>
+            <Text style={tw`text-[10px] font-bold uppercase ${isEnabled ? 'text-green-700' : 'text-red-700'}`}>
+              {court.status ? court.status : 'UNKNOWN'}
             </Text>
         </View>
       </View>
@@ -44,11 +48,14 @@ const CourtManageCard = ({ court, onDisable, onEnable }) => {
       {/* Action Buttons */}
       <View style={tw`flex-row justify-end mt-3 border-t border-gray-100 pt-3`}>
          <Pressable
-          style={tw`py-2 px-4 rounded-lg ${isEnabled ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}
-          // Pure court object pass kar rahe hain notification ke liye
+          style={({ pressed }) => tw.style(
+            `px-3 py-1.5 rounded-lg border flex-row items-center`,
+            isEnabled ? `bg-red-50 border-red-100` : `bg-green-50 border-green-100`,
+            pressed && `opacity-70`
+          )}
           onPress={() => isEnabled ? onDisable(court) : onEnable(court)}
         >
-          <Text style={tw`font-bold text-sm ${isEnabled ? 'text-red-700' : 'text-green-700'}`}>
+          <Text style={tw`text-[10px] font-bold ${isEnabled ? 'text-red-700' : 'text-green-700'}`}>
             {isEnabled ? 'Disable Court' : 'Enable Court'}
           </Text>
         </Pressable>
@@ -101,11 +108,10 @@ export default function ArenaCourtsScreen() {
             try {
               await updateDoc(doc(db, 'courts', court.id), { status: 'disabled' });
               
-              // 🔥 Notify Owner
               await notifyUser(
                 ownerId,
                 "Court Offline 🔴",
-                `Administrative Update: Your court '${court.courtName}' has been disabled and hidden from players.`,
+                `Administrative Update: Your court '${court.courtName}' has been disabled.`,
                 "alert",
                 { url: '/(owner)/myCourt' }
               );
@@ -126,11 +132,10 @@ export default function ArenaCourtsScreen() {
     try {
       await updateDoc(doc(db, 'courts', court.id), { status: 'approved' });
       
-      // 🔥 Notify Owner
       await notifyUser(
         ownerId,
         "Court Online 🟢",
-        `Great news! Your court '${court.courtName}' has been enabled and is now open for bookings.`,
+        `Great news! Your court '${court.courtName}' has been enabled.`,
         "booking",
         { url: '/(owner)/myCourt' }
       );
@@ -143,13 +148,14 @@ export default function ArenaCourtsScreen() {
   };
 
   return (
-    <SafeAreaView style={tw`flex-1 bg-gray-100`}>
+    <SafeAreaView style={tw`flex-1 bg-white`}>
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={tw`p-5`}>
+      <StatusBar barStyle="dark-content" />
+      <View style={tw`flex-1 px-5`}>
         <AdminHeader title="Manage Courts" onBack={() => router.back()} />
         
         {loading ? (
-          <ActivityIndicator size="large" color={tw.color('purple-600')} style={tw`mt-10`} />
+          <ActivityIndicator size="small" color="#9333ea" style={tw`mt-10`} />
         ) : (
           <FlatList
             data={courts}
@@ -161,10 +167,11 @@ export default function ArenaCourtsScreen() {
                 onEnable={handleEnable} 
               />
             )}
+            contentContainerStyle={tw`pb-10`}
             ListEmptyComponent={
-              <View style={tw`items-center justify-center mt-10`}>
-                <Ionicons name="folder-open-outline" size={40} color="gray" />
-                <Text style={tw`text-center text-gray-500 mt-2`}>No courts found in this arena.</Text>
+              <View style={tw`items-center justify-center mt-20 opacity-50`}>
+                <Ionicons name="folder-open-outline" size={48} color="#9ca3af" />
+                <Text style={tw`text-center text-gray-400 mt-2 text-xs`}>No courts found in this arena.</Text>
               </View>
             }
           />

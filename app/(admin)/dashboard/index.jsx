@@ -1,97 +1,93 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, StatusBar, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
-import { useAuth } from '../../../context/AuthContext'; // Logout ke liye
 
-// Reusable Button Component (Aapka wala hi style)
+// --- Reusable Menu Button Component (Smaller Icons) ---
 const AdminMenuButton = ({ title, icon, subtitle, onPress }) => (
   <Pressable
-    style={tw`bg-white p-5 rounded-xl shadow-sm flex-row items-center justify-between mb-4 border border-gray-100`}
+    style={({ pressed }) => tw.style(
+      `bg-white p-4 rounded-3xl shadow-sm border border-purple-50 mb-4 flex-row items-center justify-between`,
+      pressed && `bg-gray-50 transform scale-[0.98]`
+    )}
     onPress={onPress}
   >
     <View style={tw`flex-row items-center flex-1`}>
-      <View style={tw`p-3 bg-purple-50 rounded-full mr-4`}>
-        <Ionicons name={icon} size={24} color={tw.color('purple-700')} />
+      {/* Updated: Smaller Box (w-11 h-11) and Smaller Icon (size={20}) */}
+      <View style={tw`w-11 h-11 bg-purple-600 rounded-xl items-center justify-center mr-4 shadow-sm shadow-purple-200`}>
+        <Ionicons name={icon} size={20} color="white" />
       </View>
+      
       <View style={tw`flex-1`}>
-        <Text style={tw`text-lg font-bold text-gray-800`}>{title}</Text>
-        {subtitle && <Text style={tw`text-gray-400 text-xs`}>{subtitle}</Text>}
+        <Text style={tw`text-base font-bold text-gray-900`}>{title}</Text>
+        {subtitle && <Text style={tw`text-purple-400 text-[11px] font-medium mt-0.5`}>{subtitle}</Text>}
       </View>
     </View>
-    <Ionicons name="chevron-forward" size={20} color={tw.color('gray-400')} />
+    
+    <View style={tw`bg-gray-50 p-1.5 rounded-full`}>
+        <Ionicons name="chevron-forward" size={16} color="#9333ea" />
+    </View>
   </Pressable>
 );
 
 export default function AdminDashboard() {
   const router = useRouter();
-  const { logout } = useAuth(); // Auth context se logout function
-
-  // Logout Function with Confirmation
-  const handleLogout = async () => {
-    Alert.alert("Logout", "Are you sure you want to logout?", [
-      { text: "Cancel", style: "cancel" },
-      { 
-        text: "Logout", 
-        style: "destructive", 
-        onPress: async () => {
-          await logout();
-          // Login screen par wapas bhejne ke liye (AuthContext usually handle karta hai, but safety ke liye)
-          router.replace("/(auth)/login");
-        } 
-      },
-    ]);
-  };
 
   return (
-    <SafeAreaView style={tw`flex-1 bg-gray-50`}>
-      <ScrollView contentContainerStyle={tw`p-6`}>
+    <SafeAreaView style={tw`flex-1 bg-white`}>
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+      
+      <ScrollView contentContainerStyle={tw`pb-10`}>
         
-        {/* Header Section */}
-        <View style={tw`flex-row justify-between items-center mb-8 mt-2`}>
-          <View>
-            <Text style={tw`text-gray-500 text-xs uppercase font-bold tracking-widest mb-1`}>Admin Panel</Text>
-            <Text style={tw`text-3xl font-black text-purple-900`}>Dashboard</Text>
-          </View>
-          {/* Logout Button */}
-          <Pressable 
-            onPress={handleLogout}
-            style={tw`bg-white p-2 rounded-full shadow-sm border border-gray-100`}
-          >
-            <Ionicons name="log-out-outline" size={24} color={tw.color('red-500')} />
-          </Pressable>
+        {/* --- Header Section (No Logout) --- */}
+        <View style={tw`px-6 pt-6 pb-6 border-b border-gray-100 flex-row items-center bg-white`}>
+           {/* Header Icon size remains same as per request */}
+           <View style={tw`bg-purple-600 p-3 rounded-2xl mr-4 shadow-md shadow-purple-300`}>
+              <MaterialIcons name="admin-panel-settings" size={28} color="white" />
+           </View>
+           <View>
+              <Text style={tw`text-3xl font-extrabold text-purple-900`}>Dashboard</Text>
+              <Text style={tw`text-gray-500 text-xs font-bold tracking-widest uppercase`}>Admin Control Panel</Text>
+           </View>
         </View>
         
-        {/* Menu Grid */}
-        <View>
-          <Text style={tw`text-gray-500 font-bold mb-4 uppercase text-xs ml-1`}>Management</Text>
+        {/* --- Menu Grid --- */}
+        <View style={tw`px-6 pt-8`}>
           
-          {/* 1. Manage Users */}
+          {/* Section: Management */}
+          <Text style={tw`text-gray-400 font-bold mb-3 uppercase text-[10px] tracking-wider ml-2`}>
+            Core Management
+          </Text>
+          
           <AdminMenuButton
             title="Manage Users"
-            subtitle="Approve owners & view users"
+            subtitle="View owners & verify identities"
             icon="people"
             onPress={() => router.push('/(admin)/dashboard/users')} 
           />
           
-          {/* 2. Manage Arenas */}
           <AdminMenuButton
             title="Manage Arenas"
-            subtitle="Verify & update arenas"
+            subtitle="Update arena details & status"
             icon="business"
             onPress={() => router.push('/(admin)/dashboard/arenas')} 
           />
 
-           <Text style={tw`text-gray-500 font-bold mb-4 mt-2 uppercase text-xs ml-1`}>Support</Text>
+          {/* Section: Support */}
+          <View style={tw`mt-4`}>
+              <Text style={tw`text-gray-400 font-bold mb-3 uppercase text-[10px] tracking-wider ml-2`}>
+                Customer Service
+              </Text>
 
-          {/* 3. Support Tickets (NEW) */}
-          <AdminMenuButton
-            title="Support Tickets"
-            subtitle="View player issues & queries"
-            icon="headset" // Perfect icon for support
-            onPress={() => router.push('/(admin)/dashboard/AdminSupportScreen')} 
-          />
+              <AdminMenuButton
+                title="Support Tickets"
+                subtitle="Resolve player complaints & queries"
+                icon="headset"
+                onPress={() => router.push('/(admin)/dashboard/AdminSupportScreen')} 
+              />
+          </View>
+
         </View>
 
       </ScrollView>

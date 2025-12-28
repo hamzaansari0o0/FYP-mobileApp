@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { addDoc, collection, doc, serverTimestamp, Timestamp, updateDoc } from 'firebase/firestore';
 import moment from 'moment';
 import { useEffect, useState } from 'react';
@@ -6,7 +7,8 @@ import {
   Alert,
   Pressable,
   ScrollView,
-  Text, TextInput,
+  Text,
+  TextInput,
   View
 } from 'react-native';
 import DropDownPicker from 'react-native-dropdown-picker';
@@ -15,16 +17,18 @@ import tw from 'twrnc';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../firebase/firebaseConfig';
 
-// Helper components
+// --- 🎨 HELPER COMPONENTS (THEMED) ---
+
 const FormInput = ({ label, value, onChange, placeholder, keyboardType = 'default', disabled = false }) => (
-  <View style={tw`mb-4`}>
-    <Text style={tw`text-base font-semibold mb-2 text-gray-700`}>{label}</Text>
+  <View style={tw`mb-5`}>
+    <Text style={tw`text-sm font-bold text-gray-700 mb-2 uppercase tracking-wide`}>{label}</Text>
     <TextInput
       style={tw.style(
-        `border border-gray-300 p-3 rounded-lg text-base bg-white`,
-        disabled && `bg-gray-200 text-gray-500`
+        `border border-gray-200 p-3.5 rounded-xl text-base bg-white text-gray-800 shadow-sm`,
+        disabled && `bg-gray-100 text-gray-500 border-gray-100`
       )}
       placeholder={placeholder}
+      placeholderTextColor={tw.color('gray-400')}
       value={value}
       onChangeText={onChange}
       keyboardType={keyboardType}
@@ -34,16 +38,18 @@ const FormInput = ({ label, value, onChange, placeholder, keyboardType = 'defaul
 );
 
 const DateInput = ({ label, value, onPress, disabled = false }) => (
-  <View style={tw`mb-4`}>
-    <Text style={tw`text-base font-semibold mb-2 text-gray-700`}>{label}</Text>
+  <View style={tw`mb-5`}>
+    <Text style={tw`text-sm font-bold text-gray-700 mb-2 uppercase tracking-wide`}>{label}</Text>
     <Pressable onPress={onPress} disabled={disabled}>
       <View style={tw.style(
-        `border border-gray-300 p-3 rounded-lg bg-white`,
-        disabled && `bg-gray-200`
-      )}>
-        <Text style={tw.style(`text-base`, disabled && `text-gray-500`)}>
+        `flex-row justify-between items-center border border-gray-200 p-3.5 rounded-xl bg-white shadow-sm`,
+        disabled && `bg-gray-100 border-gray-100`
+      )}
+      >
+        <Text style={tw.style(`text-base font-medium`, disabled ? `text-gray-400` : `text-gray-800`)}>
           {moment(value).format('MMMM D, YYYY')}
         </Text>
+        <Ionicons name="calendar-outline" size={20} color={disabled ? tw.color('gray-400') : tw.color('green-700')} />
       </View>
     </Pressable>
   </View>
@@ -66,7 +72,7 @@ const padelSizes = [
 ];
 const cricketSizes = futsalSizes; 
 
-// Main Form Component
+// --- MAIN FORM COMPONENT ---
 export default function TournamentRegistrationForm({ 
   onSuccess, 
   isEditMode = false, 
@@ -95,9 +101,9 @@ export default function TournamentRegistrationForm({
   // Dropdown states
   const [openPicker, setOpenPicker] = useState(null);
   const [gameTypeItems, setGameTypeItems] = useState([
-    { label: 'Futsal', value: 'futsal' },
-    { label: 'Padel', value: 'padel' },
-    { label: 'Cricket', value: 'cricket' },
+    { label: 'Futsal', value: 'futsal', icon: () => <Ionicons name="football" size={18} color={tw.color('green-700')} /> },
+    { label: 'Padel', value: 'padel', icon: () => <Ionicons name="tennisball" size={18} color={tw.color('green-700')} /> },
+    { label: 'Cricket', value: 'cricket', icon: () => <Ionicons name="baseball" size={18} color={tw.color('green-700')} /> },
   ]);
   const [teamSizeItems, setTeamSizeItems] = useState(futsalSizes);
   const [formatItems, setFormatItems] = useState([
@@ -192,7 +198,6 @@ export default function TournamentRegistrationForm({
         Alert.alert('Success!', 'Your tournament is now live.');
       }
       
-      // 🔥 FIX: Ab hum ID aur Data dono wapas bhej rahe hain
       if (onSuccess) {
         onSuccess(resultId, tournamentData);
       }
@@ -206,19 +211,25 @@ export default function TournamentRegistrationForm({
   };
 
   return (
-    <ScrollView contentContainerStyle={tw`p-5`} nestedScrollEnabled={true}>
+    <ScrollView 
+        // 🟢 FIX: Padding Bottom increased to 40 (pb-40) to clear Tab Bar
+        contentContainerStyle={tw`p-5 pb-40`} 
+        nestedScrollEnabled={true}
+        showsVerticalScrollIndicator={false}
+    >
       
       {/* Name */}
       <FormInput
         label="Tournament Name"
+        placeholder="e.g. Summer Futsal Cup"
         value={formData.tournamentName}
         onChange={(val) => handleInputChange('tournamentName', val)}
         disabled={isEditMode} 
       />
 
       {/* Game Type */}
-      <View style={tw`mb-4 z-50`}>
-        <Text style={tw`text-base font-semibold mb-2 text-gray-700`}>Game Type</Text>
+      <View style={tw`mb-5 z-50`}>
+        <Text style={tw`text-sm font-bold text-gray-700 mb-2 uppercase tracking-wide`}>Game Type</Text>
         <DropDownPicker
           open={openPicker === 'gameType'}
           value={formData.gameType}
@@ -228,29 +239,39 @@ export default function TournamentRegistrationForm({
           setItems={setGameTypeItems}
           listMode="SCROLLVIEW"
           disabled={isEditMode} 
-          style={tw`border-gray-300`}
-          textStyle={tw`text-base`}
+          style={tw`border-gray-200 rounded-xl bg-white min-h-[50px]`}
+          dropDownContainerStyle={tw`border-gray-200 shadow-sm`}
+          textStyle={tw`text-base text-gray-800`}
+          placeholder="Select Game Type"
         />
       </View>
 
-      <FormInput
-        label="Entry Fee (PKR)"
-        value={formData.entryFee}
-        onChange={(val) => handleInputChange('entryFee', val)}
-        keyboardType="numeric"
-        disabled={isEditMode} 
-      />
-      <FormInput
-        label="Prize Money (PKR)"
-        value={formData.prizeMoney}
-        onChange={(val) => handleInputChange('prizeMoney', val)}
-        keyboardType="numeric"
-        disabled={isEditMode} 
-      />
+      <View style={tw`flex-row justify-between`}>
+          <View style={tw`w-[48%]`}>
+            <FormInput
+                label="Entry Fee"
+                placeholder="PKR 0"
+                value={formData.entryFee}
+                onChange={(val) => handleInputChange('entryFee', val)}
+                keyboardType="numeric"
+                disabled={isEditMode} 
+            />
+          </View>
+          <View style={tw`w-[48%]`}>
+            <FormInput
+                label="Prize Pool"
+                placeholder="PKR 0"
+                value={formData.prizeMoney}
+                onChange={(val) => handleInputChange('prizeMoney', val)}
+                keyboardType="numeric"
+                disabled={isEditMode} 
+            />
+          </View>
+      </View>
 
       {/* Team Size */}
-      <View style={tw`mb-4 z-40`}>
-        <Text style={tw`text-base font-semibold mb-2 text-gray-700`}>Team Size</Text>
+      <View style={tw`mb-5 z-40`}>
+        <Text style={tw`text-sm font-bold text-gray-700 mb-2 uppercase tracking-wide`}>Team Size</Text>
         <DropDownPicker
           open={openPicker === 'teamSize'}
           value={formData.teamSize}
@@ -259,14 +280,15 @@ export default function TournamentRegistrationForm({
           setValue={(callback) => handleInputChange('teamSize', callback(formData.teamSize))}
           setItems={setTeamSizeItems}
           listMode="SCROLLVIEW"
-          style={tw`border-gray-300`}
-          textStyle={tw`text-base`}
+          style={tw`border-gray-200 rounded-xl bg-white min-h-[50px]`}
+          dropDownContainerStyle={tw`border-gray-200 shadow-sm`}
+          textStyle={tw`text-base text-gray-800`}
         />
       </View>
 
       {/* Format */}
-      <View style={tw`mb-4 z-30`}>
-        <Text style={tw`text-base font-semibold mb-2 text-gray-700`}>Format</Text>
+      <View style={tw`mb-5 z-30`}>
+        <Text style={tw`text-sm font-bold text-gray-700 mb-2 uppercase tracking-wide`}>Format</Text>
         <DropDownPicker
           open={openPicker === 'format'}
           value={formData.format}
@@ -275,14 +297,15 @@ export default function TournamentRegistrationForm({
           setValue={(callback) => handleInputChange('format', callback(formData.format))}
           setItems={setFormatItems}
           listMode="SCROLLVIEW"
-          style={tw`border-gray-300`}
-          textStyle={tw`text-base`}
+          style={tw`border-gray-200 rounded-xl bg-white min-h-[50px]`}
+          dropDownContainerStyle={tw`border-gray-200 shadow-sm`}
+          textStyle={tw`text-base text-gray-800`}
         />
       </View>
 
       {/* Team Limit */}
-      <View style={tw`mb-4 z-20`}>
-        <Text style={tw`text-base font-semibold mb-2 text-gray-700`}>Team Limit</Text>
+      <View style={tw`mb-5 z-20`}>
+        <Text style={tw`text-sm font-bold text-gray-700 mb-2 uppercase tracking-wide`}>Team Limit</Text>
         <DropDownPicker
           open={openPicker === 'teamLimit'}
           value={formData.teamLimit}
@@ -291,43 +314,58 @@ export default function TournamentRegistrationForm({
           setValue={(callback) => handleInputChange('teamLimit', callback(formData.teamLimit))}
           setItems={setTeamLimitItems}
           listMode="SCROLLVIEW"
-          style={tw`border-gray-300`}
-          textStyle={tw`text-base`}
+          style={tw`border-gray-200 rounded-xl bg-white min-h-[50px]`}
+          dropDownContainerStyle={tw`border-gray-200 shadow-sm`}
+          textStyle={tw`text-base text-gray-800`}
         />
       </View>
 
-      <DateInput 
-        label="Registration Deadline" 
-        value={regDeadline} 
-        onPress={() => showDatePicker('regDeadline')} 
-      />
-      <DateInput 
-        label="Tournament Start Date" 
-        value={startDate} 
-        onPress={() => showDatePicker('startDate')} 
-      />
-      <DateInput 
-        label="Tournament End Date" 
-        value={endDate} 
-        onPress={() => showDatePicker('endDate')} 
-      />
+      {/* Dates Section */}
+      <View style={tw`bg-gray-50 p-4 rounded-xl border border-gray-100 mb-5`}>
+          <Text style={tw`text-xs font-bold text-gray-500 mb-3 uppercase`}>Schedule</Text>
+          <DateInput 
+            label="Registration Deadline" 
+            value={regDeadline} 
+            onPress={() => showDatePicker('regDeadline')} 
+          />
+          <DateInput 
+            label="Tournament Start" 
+            value={startDate} 
+            onPress={() => showDatePicker('startDate')} 
+          />
+          <DateInput 
+            label="Tournament End" 
+            value={endDate} 
+            onPress={() => showDatePicker('endDate')} 
+          />
+      </View>
+
       <FormInput
-        label="Rules (Optional)"
+        label="Rules / Description"
+        placeholder="Enter tournament rules..."
         value={formData.rules}
         onChange={(val) => handleInputChange('rules', val)}
       />
       
+      {/* 🟢 THEMED BUTTON */}
       <Pressable
-        style={tw.style(`bg-green-600 py-4 rounded-lg shadow-md mt-4 mb-10`, isSubmitting && `bg-green-400`)}
+        style={({pressed}) => [
+            tw`bg-green-800 py-4 rounded-xl shadow-md mt-2 mb-10 flex-row justify-center items-center`,
+            pressed && tw`bg-green-700`,
+            isSubmitting && tw`bg-green-600`
+        ]}
         onPress={handleSubmit}
         disabled={isSubmitting}
       >
         {isSubmitting ? (
           <ActivityIndicator color={tw.color('white')} />
         ) : (
-          <Text style={tw`text-white text-center text-lg font-bold`}>
-            {isEditMode ? 'Update Tournament' : 'Create Tournament'}
-          </Text>
+          <>
+            <Ionicons name={isEditMode ? "save-outline" : "add-circle-outline"} size={22} color="white" style={tw`mr-2`} />
+            <Text style={tw`text-white text-center text-lg font-bold`}>
+                {isEditMode ? 'Update Tournament' : 'Create Tournament'}
+            </Text>
+          </>
         )}
       </Pressable>
       

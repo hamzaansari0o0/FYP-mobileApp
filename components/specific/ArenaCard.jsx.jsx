@@ -1,8 +1,8 @@
-import React from "react";
-import { View, Text, Pressable, ImageBackground } from "react-native";
-import { Link } from "expo-router";
-import tw from "twrnc";
 import { Ionicons } from "@expo/vector-icons";
+import { Link } from "expo-router";
+import React from "react";
+import { ImageBackground, Pressable, Text, View } from "react-native";
+import tw from "twrnc";
 
 export default function ArenaCard({ arena }) {
   const arenaImage = arena.arenaImageUrl

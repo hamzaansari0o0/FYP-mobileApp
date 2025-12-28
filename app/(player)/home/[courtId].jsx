@@ -47,13 +47,16 @@ export default function CourtDetailScreen() {
 
         if (courtSnap.exists()) {
           const courtData = courtSnap.data();
+          
           if (courtData.status !== "approved") {
             Alert.alert("Not Available", "This court is disabled.");
             router.back();
             return;
           }
+          
           let ownerArenaName = "Sports Arena";
           let ownerArenaAddress = "";
+          
           if (courtData.ownerId) {
             const ownerSnap = await getDoc(doc(db, "users", courtData.ownerId));
             if (ownerSnap.exists()) {
@@ -62,6 +65,7 @@ export default function CourtDetailScreen() {
               ownerArenaAddress = ownerData.arenaAddress || "";
             }
           }
+          
           setCourt({
             ...courtData,
             arenaName: courtData.arenaName || ownerArenaName,
@@ -144,109 +148,117 @@ export default function CourtDetailScreen() {
     }
   };
 
-  if (loading) return <View style={tw`flex-1 items-center justify-center bg-white`}><ActivityIndicator size="large" color={tw.color("green-600")} /></View>;
+  if (loading) return <View style={tw`flex-1 items-center justify-center bg-gray-50`}><ActivityIndicator size="large" color="#15803d" /></View>;
   if (!court) return null;
 
-  // Image Logic (Same as fixed before)
-  let imageUri = "https://images.unsplash.com/photo-1574629810360-7efbbe195018?q=80&w=2836&auto=format&fit=crop"; 
-  if (court?.images && Array.isArray(court.images) && court.images.length > 0) imageUri = court.images[0];
-  else if (court?.image) imageUri = court.image;
-  else if (court?.imageUrl) imageUri = court.imageUrl;
-  
+  // Image Logic
+  const imageSource = court.courtImageURL 
+    ? { uri: court.courtImageURL } 
+    : (court.courtImageUrl 
+        ? { uri: court.courtImageUrl }
+        : (court.image 
+            ? { uri: court.image } 
+            : { uri: "https://via.placeholder.com/600x400?text=No+Image" }
+          )
+      );
+
   const totalSlots = selectedSlots.length;
   const totalPrice = totalSlots * court.pricePerHour;
 
   return (
-    <View style={tw`flex-1 bg-white`}>
+    <View style={tw`flex-1 bg-gray-50`}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       
-      <ScrollView contentContainerStyle={tw`pb-32`}> 
+      {/* 🔥 ScrollView contains EVERYTHING now */}
+      <ScrollView 
+        style={tw`flex-1`} 
+        // 🔥 Extra padding bottom (pb-40) taake button tab bar ke upar clear nazar aaye
+        contentContainerStyle={tw`pb-40`} 
+      > 
         
         {/* Court Image Header */}
         <ImageBackground
-            source={{ uri: imageUri }} 
-            style={tw`h-72 w-full justify-end bg-gray-900`} // Size h-80 se h-72 wapis kar diya (Compact)
+            source={imageSource} 
+            style={tw`h-80 w-full justify-end bg-green-900`} 
             resizeMode="cover"
         >
-            <View style={tw`absolute inset-0 bg-black/50`} /> 
+            <View style={tw`absolute inset-0 bg-black/40`} /> 
+            
+            <Pressable 
+                onPress={() => router.back()} 
+                style={tw`absolute top-12 left-5 bg-black/30 p-2.5 rounded-full border border-white/20`}
+            >
+                <Ionicons name="arrow-back" size={24} color="white" />
+            </Pressable>
             
             <View style={tw`p-5 pb-8`}>
-                <Pressable 
-                    onPress={() => router.back()} 
-                    style={tw`absolute -top-52 left-5 bg-white/20 p-2 rounded-full backdrop-blur-md`}
-                >
-                    <Ionicons name="arrow-back" size={20} color="white" />
-                </Pressable>
-
-                <View style={tw`bg-green-600 self-start px-2 py-0.5 rounded mb-2`}>
+                <View style={tw`bg-green-600 self-start px-2.5 py-1 rounded-md mb-2 shadow-sm`}>
                    <Text style={tw`text-white font-bold text-[10px] uppercase tracking-wider`}>
                        {court.arenaName}
                    </Text>
                 </View>
                 
-                {/* Font Size Reduced: text-3xl -> text-2xl */}
-                <Text style={tw`text-white text-2xl font-extrabold mb-1 shadow-md`}>
+                <Text style={tw`text-white text-3xl font-black mb-1 shadow-sm`}>
                     {court.courtName}
                 </Text>
                 
-                <View style={tw`flex-row items-center mt-0.5`}>
-                    <Ionicons name="location" size={14} color="#e5e7eb" />
-                    {/* Address Text Reduced: text-sm -> text-xs */}
-                    <Text style={tw`text-gray-200 ml-1 text-xs font-medium`}>
+                <View style={tw`flex-row items-center mt-0.5 opacity-90`}>
+                    <Ionicons name="location" size={16} color="#4ade80" />
+                    <Text style={tw`text-gray-100 ml-1 text-sm font-medium`}>
                         {court.displayAddress}
                     </Text>
                 </View>
             </View>
         </ImageBackground>
 
-        <View style={tw`px-4 pt-6 -mt-6 bg-white rounded-t-3xl shadow-lg`}>
+        {/* Slot Picker Content */}
+        <View style={tw`px-4 pt-6 -mt-8 bg-gray-50 rounded-t-3xl shadow-lg min-h-[300px]`}>
             <SlotPicker
                 courtId={courtId}
-                courtData={{...court, image: imageUri}}
+                courtData={{...court, image: imageSource.uri}} 
                 onSlotsChange={handleSlotsChange}
                 refreshKey={refreshKey}
             />
         </View>
 
-      </ScrollView>
+        {/* 🔥 BOOKING SECTION (Moved INSIDE ScrollView) */}
+        <View style={tw`mx-4 mt-8 bg-white p-4 rounded-xl shadow-md border border-gray-100`}>
+            <View style={tw`flex-row items-center justify-between`}>
+                <View>
+                    {totalSlots > 0 ? (
+                        <>
+                        <Text style={tw`text-gray-500 text-[10px] uppercase font-bold tracking-wide`}>Total ({totalSlots} Slots)</Text>
+                        <Text style={tw`text-2xl font-black text-green-900`}>
+                            Rs. {totalPrice}
+                        </Text>
+                        </>
+                    ) : (
+                        <>
+                        <Text style={tw`text-gray-500 text-[10px] uppercase font-bold tracking-wide`}>Price per hour</Text>
+                        <Text style={tw`text-2xl font-black text-green-900`}>
+                            Rs. {court.pricePerHour}
+                        </Text>
+                        </>
+                    )}
+                </View>
 
-      {/* Sticky Footer */}
-      <View style={tw`absolute bottom-0 left-0 right-0 bg-white border-t border-gray-100 p-4 pb-6 shadow-2xl`}>
-        <View style={tw`flex-row items-center justify-between`}>
-            <View>
-                {totalSlots > 0 ? (
-                    <>
-                    <Text style={tw`text-gray-500 text-[10px] uppercase font-bold`}>Total ({totalSlots} Slots)</Text>
-                    {/* Price Font Reduced: text-2xl -> text-xl */}
-                    <Text style={tw`text-xl font-extrabold text-green-700`}>
-                        Rs. {totalPrice}
+                <Pressable
+                    onPress={() => setIsPaymentModalVisible(true)}
+                    disabled={totalSlots === 0 || !user}
+                    style={({pressed}) => tw.style(
+                        `px-6 py-3.5 rounded-xl flex-row items-center shadow-sm`,
+                        (totalSlots === 0 || !user) ? `bg-gray-300` : (pressed ? `bg-green-900` : `bg-green-800`)
+                    )}
+                >
+                    <Text style={tw`text-white font-bold text-base mr-2`}>
+                        {user ? "Book Now" : "Login"}
                     </Text>
-                    </>
-                ) : (
-                    <>
-                    <Text style={tw`text-gray-500 text-[10px] uppercase font-bold`}>Price per hour</Text>
-                    <Text style={tw`text-xl font-extrabold text-gray-800`}>
-                        Rs. {court.pricePerHour}
-                    </Text>
-                    </>
-                )}
+                    {user && <Ionicons name="arrow-forward" size={18} color="white" />}
+                </Pressable>
             </View>
-
-            <Pressable
-                onPress={() => setIsPaymentModalVisible(true)}
-                disabled={totalSlots === 0 || !user}
-                style={tw.style(
-                    `bg-gray-900 px-6 py-3 rounded-xl shadow-lg flex-row items-center`,
-                    (totalSlots === 0 || !user) && `opacity-50 bg-gray-400`
-                )}
-            >
-                <Text style={tw`text-white font-bold text-base mr-2`}>
-                    {user ? "Book Now" : "Login"}
-                </Text>
-                {user && <Ionicons name="arrow-forward" size={18} color="white" />}
-            </Pressable>
         </View>
-      </View>
+
+      </ScrollView>
 
       {/* Payment Modal */}
       {selectedSlots.length > 0 && (

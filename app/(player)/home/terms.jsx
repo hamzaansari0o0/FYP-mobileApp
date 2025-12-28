@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router"; // Stack hata dia kyunke header system ka use hoga
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
   Pressable,
@@ -15,7 +15,7 @@ export default function TermsPolicyScreen() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("refund");
 
-  // --- CONTENT SECTIONS (Same as before) ---
+  // --- CONTENT SECTIONS ---
 
   const RefundContent = () => (
     <View>
@@ -123,8 +123,6 @@ export default function TermsPolicyScreen() {
     <SafeAreaView style={tw`flex-1 bg-white`}>
       <StatusBar barStyle="dark-content" />
 
-      {/* --- HEADER REMOVED (System Header will show) --- */}
-      
       {/* Tabs */}
       <View style={tw`flex-row px-4 py-4`}>
         {['privacy', 'refund', 'terms'].map((tab) => (

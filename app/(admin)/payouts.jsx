@@ -8,16 +8,15 @@ import {
   orderBy,
   query,
   runTransaction,
-  Timestamp,
   where,
 } from "firebase/firestore";
-import moment from "moment";
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   FlatList,
   Pressable,
+  StatusBar,
   Text,
   View,
 } from "react-native";
@@ -31,50 +30,61 @@ import { notifyUser } from "../../utils/notifications";
 // --- Payout Card Component ---
 const PayoutCard = ({ booking, onApprove, isProcessing }) => {
   // --- NAYA HISAB (5% Admin Commission Model) ---
-  const totalBookingPrice = booking.totalPrice || 0;
+  const totalBookingPrice = booking.totalPrice || booking.amountPaid || 0;
   const adminCommission = Math.round(totalBookingPrice * 0.05); // 5% Commission
   const ownerPayout = totalBookingPrice - adminCommission; // 95% to Owner
 
+  // Time Display Logic
+  let timeDisplay = "N/A";
+  if (booking.timeDisplayRange) {
+      timeDisplay = booking.timeDisplayRange;
+  } else if (booking.bookedHours && Array.isArray(booking.bookedHours) && booking.bookedHours.length > 0) {
+      const start = Math.min(...booking.bookedHours);
+      const end = Math.max(...booking.bookedHours) + 1;
+      timeDisplay = `${start}:00 - ${end}:00`;
+  } else if (booking.slotTime) {
+      timeDisplay = `${booking.slotTime}:00`;
+  }
+
   return (
-    <View style={tw`bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4`}>
+    <View style={tw`bg-white p-4 rounded-3xl shadow-sm border border-purple-50 mb-4`}>
       <View style={tw`flex-row justify-between items-start mb-2`}>
         <View>
-          <Text style={tw`text-sm font-bold text-purple-800`}>BOOKING ID: {booking.id.slice(-6).toUpperCase()}</Text>
-          <Text style={tw`text-base font-semibold text-gray-800 mt-1`}>
+          <Text style={tw`text-xs font-bold text-purple-800 tracking-wider`}>ID: {booking.id.slice(-6).toUpperCase()}</Text>
+          <Text style={tw`text-lg font-bold text-gray-900 mt-1`}>
             {booking.playerName}
           </Text>
         </View>
-        <View style={tw`bg-purple-100 px-2 py-1 rounded`}>
-          <Text style={tw`text-xs font-bold text-purple-700`}>PENDING PAYOUT</Text>
+        <View style={tw`bg-purple-100 px-3 py-1 rounded-full`}>
+          <Text style={tw`text-[10px] font-bold text-purple-700`}>NEEDS PAYOUT</Text>
         </View>
       </View>
 
-      <Text style={tw`text-sm text-gray-600 mb-3`}>
-        <Ionicons name="calendar-outline" size={14} /> {booking.date} | 
-        <Ionicons name="time-outline" size={14} /> {moment(booking.slotTime, "HH").format("h:00 A")}
+      <Text style={tw`text-sm text-gray-500 mb-4 flex-row items-center`}>
+        <Ionicons name="calendar-outline" size={14} style={tw`mr-1`} /> {booking.date}  •  
+        <Ionicons name="time-outline" size={14} style={tw`mr-1 ml-2`} /> {timeDisplay}
       </Text>
 
-      <View style={tw`border-t border-gray-100 my-2 pt-2`} />
-
-      <View style={tw`flex-row justify-between mb-1`}>
-        <Text style={tw`text-sm text-gray-500`}>Total Booking Price:</Text>
-        <Text style={tw`text-sm font-bold text-gray-800`}>Rs. {totalBookingPrice}</Text>
-      </View>
-
-      <View style={tw`flex-row justify-between mb-1`}>
-        <Text style={tw`text-sm text-blue-600 font-medium`}>Owner Payout (95%):</Text>
-        <Text style={tw`text-sm font-bold text-blue-600`}>Rs. {ownerPayout}</Text>
-      </View>
-
-      <View style={tw`flex-row justify-between mb-3`}>
-        <Text style={tw`text-sm text-green-600 font-medium`}>Admin Commission (5%):</Text>
-        <Text style={tw`text-sm font-bold text-green-600`}>Rs. {adminCommission}</Text>
+      <View style={tw`bg-gray-50 p-3 rounded-xl mb-4`}>
+        <View style={tw`flex-row justify-between mb-1`}>
+            <Text style={tw`text-xs text-gray-500`}>Total Booking:</Text>
+            <Text style={tw`text-xs font-bold text-gray-800`}>Rs. {totalBookingPrice}</Text>
+        </View>
+        <View style={tw`flex-row justify-between mb-1`}>
+            <Text style={tw`text-xs text-green-600 font-medium`}>Admin (5%):</Text>
+            <Text style={tw`text-xs font-bold text-green-600`}>Rs. {adminCommission}</Text>
+        </View>
+        <View style={tw`h-[1px] bg-gray-200 my-1`} />
+        <View style={tw`flex-row justify-between`}>
+            <Text style={tw`text-sm text-purple-700 font-bold`}>Owner Payout (95%):</Text>
+            <Text style={tw`text-sm font-extrabold text-purple-700`}>Rs. {ownerPayout}</Text>
+        </View>
       </View>
 
       <Pressable
         style={tw.style(
-          `bg-purple-600 py-3 rounded-lg shadow-sm flex-row justify-center items-center`,
-          isProcessing && `bg-gray-400`
+          `bg-purple-600 py-3 rounded-xl shadow-md shadow-purple-200 flex-row justify-center items-center active:bg-purple-700`,
+          isProcessing && `bg-gray-400 shadow-none`
         )}
         onPress={() => onApprove(booking, adminCommission, ownerPayout)}
         disabled={isProcessing}
@@ -84,8 +94,8 @@ const PayoutCard = ({ booking, onApprove, isProcessing }) => {
         ) : (
           <>
             <Ionicons name="cash-outline" size={18} color="white" style={tw`mr-2`} />
-            <Text style={tw`text-white text-center font-bold text-base`}>
-              Approve & Release Payout
+            <Text style={tw`text-white text-center font-bold text-sm`}>
+              Approve & Release
             </Text>
           </>
         )}
@@ -114,9 +124,8 @@ export default function PayoutsScreen() {
     try {
       const q = query(
         collection(db, "bookings"),
-        where("status", "==", "upcoming"),
-        where("slotEndDateTime", "<", Timestamp.now()),
-        orderBy("slotEndDateTime", "asc")
+        where("status", "==", "completed_pending_payout"),
+        orderBy("date", "asc")
       );
 
       const querySnapshot = await getDocs(q);
@@ -127,13 +136,12 @@ export default function PayoutsScreen() {
       setBookings(bookingsList);
     } catch (error) {
       console.error("Error fetching payouts: ", error.message);
-      Alert.alert("Error", "Could not load pending payouts.");
     } finally {
       setLoading(false);
     }
   };
 
-  // --- 🔥 UPDATED: Transaction Logic with Professional Notification ---
+  // --- 🔥 TRANSACTION LOGIC ---
   const handleApprovePayout = async (booking, adminCommission, ownerPayout) => {
     setProcessingId(booking.id);
 
@@ -155,8 +163,8 @@ export default function PayoutsScreen() {
           ? `...${ownerPayoutAccount.slice(-4)}`
           : "[No Account]";
 
-        // 1. Update status to prevent double payout
-        transaction.update(bookingRef, { status: "completed_and_paid" });
+        // 1. Update status to SETTLED
+        transaction.update(bookingRef, { status: "completed_settled" });
 
         // 2. Update Admin Revenue
         if (!adminRevDoc.exists()) {
@@ -170,13 +178,13 @@ export default function PayoutsScreen() {
         return display; 
       });
 
-      // --- 🔥 PROFESSIONAL NOTIFICATION TO OWNER ---
+      // --- 🔥 NOTIFICATION TO OWNER ---
       await notifyUser(
         booking.ownerId,
         "Payout Released! 💰",
         `Rs. ${ownerPayout} has been transferred to your account (${accountDisplay}) for booking at ${booking.arenaName}.`,
-        "info",
-        { url: '/(owner)/profile' } // Payout history dekhne ke liye
+        "success",
+        { url: '/(owner)/transactions' } 
       );
 
       Alert.alert(
@@ -184,7 +192,7 @@ export default function PayoutsScreen() {
         `Payout of Rs. ${ownerPayout} has been processed. The owner has been notified.`
       );
       
-      fetchPendingPayouts();
+      fetchPendingPayouts(); // List refresh
     } catch (error) {
       console.error("Payout Failed: ", error);
       Alert.alert("Error", "Failed to process payout. Please try again.");
@@ -194,41 +202,50 @@ export default function PayoutsScreen() {
   };
 
   return (
-    <SafeAreaView style={tw`flex-1 bg-gray-50`}>
-      <View style={tw`p-5`}>
-        <View style={tw`flex-row items-center mb-6`}>
-           <View style={tw`bg-purple-600 p-2 rounded-lg mr-3`}>
-              <Ionicons name="wallet" size={24} color="white" />
-           </View>
-           <Text style={tw`text-3xl font-bold text-gray-900`}>Payouts</Text>
-        </View>
+    <SafeAreaView style={tw`flex-1 bg-white`}>
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
 
-        {loading ? (
-          <ActivityIndicator size="large" color={tw.color("purple-600")} style={tw`mt-20`} />
-        ) : (
-          <FlatList
-            data={bookings}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={tw`pb-20`}
-            renderItem={({ item }) => (
-              <PayoutCard
-                booking={item}
-                onApprove={handleApprovePayout}
-                isProcessing={processingId === item.id}
-              />
-            )}
-            ListEmptyComponent={
-              <View style={tw`items-center justify-center mt-20`}>
-                <View style={tw`bg-gray-100 p-6 rounded-full mb-4`}>
-                  <Ionicons name="checkmark-done" size={50} color={tw.color("gray-400")} />
-                </View>
-                <Text style={tw`text-xl font-bold text-gray-500`}>All Clear!</Text>
-                <Text style={tw`text-sm text-gray-400 mt-1`}>No pending payouts at the moment.</Text>
-              </View>
-            }
-          />
-        )}
+      {/* --- HEADER (MATCHING APPROVALS STYLE) --- */}
+      <View style={tw`px-6 pt-6 pb-4 bg-white border-b border-gray-100 flex-row items-center`}>
+        {/* Updated Icon Style */}
+        <View style={tw`bg-purple-600 p-3 rounded-2xl mr-4 shadow-md shadow-purple-300`}>
+           <Ionicons name="wallet" size={26} color="white" />
+        </View>
+        <View>
+           <Text style={tw`text-3xl font-extrabold text-purple-900`}>Payouts</Text>
+           <Text style={tw`text-gray-500 text-xs font-medium tracking-wide`}>MANAGE PAYMENTS</Text>
+        </View>
       </View>
+
+      {/* --- CONTENT --- */}
+      {loading ? (
+        <ActivityIndicator size="large" color={tw.color("purple-600")} style={tw`mt-20`} />
+      ) : (
+        <FlatList
+          data={bookings}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={tw`px-6 py-6 pb-20`}
+          showsVerticalScrollIndicator={false}
+          renderItem={({ item }) => (
+            <PayoutCard
+              booking={item}
+              onApprove={handleApprovePayout}
+              isProcessing={processingId === item.id}
+            />
+          )}
+          ListEmptyComponent={
+            <View style={tw`items-center justify-center mt-20`}>
+              <View style={tw`bg-green-50 p-6 rounded-full mb-4`}>
+                <Ionicons name="checkmark-done-circle" size={60} color="#22c55e" />
+              </View>
+              <Text style={tw`text-xl font-bold text-gray-900`}>All Clear!</Text>
+              <Text style={tw`text-sm text-gray-400 mt-2 text-center px-10`}>
+                  No completed bookings waiting for payout.
+              </Text>
+            </View>
+          }
+        />
+      )}
     </SafeAreaView>
   );
 }

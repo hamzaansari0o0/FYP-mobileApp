@@ -1,20 +1,29 @@
-import React, { useState, useCallback } from 'react';
+import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect, useRouter } from "expo-router"; // useRouter add kiya
 import {
-  View,
-  Text,
-  FlatList,
+  collection,
+  getDocs,
+  query,
+  Timestamp,
+  where,
+} from "firebase/firestore";
+import React, { useCallback, useState } from "react";
+import {
   ActivityIndicator,
   Alert,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import tw from 'twrnc';
-import { db } from '../../../firebase/firebaseConfig';
-import { collection, query, where, getDocs, Timestamp, orderBy } from 'firebase/firestore'; 
-import { useFocusEffect } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import TournamentCard from '../../../components/specific/TournamentCard';
+  FlatList,
+  Pressable, // Pressable add kiya
+  StatusBar,
+  Text,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import tw from "twrnc";
+import TournamentCard from "../../../components/specific/TournamentCard";
+import { db } from "../../../firebase/firebaseConfig";
 
 export default function TournamentsScreen() {
+  const router = useRouter(); // Router hook
   const [tournaments, setTournaments] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -26,45 +35,49 @@ export default function TournamentsScreen() {
 
   const fetchActiveTournaments = async () => {
     setLoading(true);
+
     try {
-      // 1 din pehle ka time calculate karein
       const oneDayAgo = new Date();
       oneDayAgo.setDate(oneDayAgo.getDate() - 1);
 
-      // Query A: 'live' aur 'registration_open' tournaments
       const q1 = query(
-        collection(db, 'tournaments'),
-        where('status', 'in', ['registration_open', 'live'])
+        collection(db, "tournaments"),
+        where("status", "in", ["registration_open", "live"])
       );
 
-      // Query B: 'completed' tournaments (jo 24 ghante pehle khatam hue)
       const q2 = query(
-        collection(db, 'tournaments'),
-        where('status', '==', 'completed'),
-        where('completedAt', '>', Timestamp.fromDate(oneDayAgo)) // <-- Automatic filter
+        collection(db, "tournaments"),
+        where("status", "==", "completed"),
+        where("completedAt", ">", Timestamp.fromDate(oneDayAgo))
       );
 
       const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
 
-      // Results ko combine (merge) karein
       const tournamentMap = new Map();
-      snap1.docs.forEach(doc => tournamentMap.set(doc.id, { id: doc.id, ...doc.data() }));
-      snap2.docs.forEach(doc => tournamentMap.set(doc.id, { id: doc.id, ...doc.data() }));
+
+      snap1.docs.forEach((doc) =>
+        tournamentMap.set(doc.id, { id: doc.id, ...doc.data() })
+      );
+
+      snap2.docs.forEach((doc) =>
+        tournamentMap.set(doc.id, { id: doc.id, ...doc.data() })
+      );
 
       let list = Array.from(tournamentMap.values());
-      list.sort((a, b) => b.createdAt.toDate() - a.createdAt.toDate()); 
+
+      list.sort((a, b) => b.createdAt.toDate() - a.createdAt.toDate());
 
       setTournaments(list);
-
     } catch (error) {
       console.error("Error fetching tournaments: ", error);
-      if (error.code === 'failed-precondition') {
-          Alert.alert(
-            "Database Error", 
-            "Query requires an index. Please check the console log for a link to create it."
-          );
+
+      if (error.code === "failed-precondition") {
+        Alert.alert(
+          "Database Error",
+          "Query requires an index. Please check the console log for a link to create it."
+        );
       } else {
-          Alert.alert('Error', 'Could not fetch tournaments.');
+        Alert.alert("Error", "Could not fetch tournaments.");
       }
     } finally {
       setLoading(false);
@@ -72,29 +85,63 @@ export default function TournamentsScreen() {
   };
 
   return (
-    <SafeAreaView style={tw`flex-1 bg-gray-100`}>
-      {loading ? (
-        <ActivityIndicator
-          size="large"
-          color={tw.color("blue-600")}
-          style={tw`mt-20`}
-        />
-      ) : (
-        <FlatList
-          data={tournaments}
-          keyExtractor={item => item.id}
-          renderItem={({ item }) => <TournamentCard tournament={item} />}
-          contentContainerStyle={tw`p-4`}
-          ListEmptyComponent={
-            <View style={tw`items-center justify-center mt-20`}>
-              <Ionicons name="trophy-outline" size={40} color={tw.color("gray-400")} />
-              <Text style={tw`text-lg text-gray-500 mt-2`}>
-                No active or upcoming tournaments found.
-              </Text>
-            </View>
-          }
-        />
-      )}
+    <SafeAreaView style={tw`flex-1 bg-green-800`}>
+      <StatusBar barStyle="light-content" backgroundColor="#166534" />
+
+      {/* --- Header Section --- */}
+      <View style={tw`px-5 py-4 bg-green-800 pb-8`}>
+        {/* Row for Arrow and Title */}
+        <View style={tw`flex-row items-center mb-1`}>
+          <Pressable 
+            onPress={() => router.back()} 
+            style={tw`mr-3 p-1 rounded-full bg-white/10`}
+          >
+            <Ionicons name="arrow-back" size={24} color="white" />
+          </Pressable>
+          
+          <Text style={tw`text-2xl font-bold text-white tracking-wide`}>
+            Tournaments 🏆
+          </Text>
+        </View>
+
+        {/* Subtitle aligned with text */}
+        <Text style={tw`text-green-100 text-xs ml-10`}>
+          Compete, Win, and Rank Up!
+        </Text>
+      </View>
+
+      {/* --- Body (Rounded Top) --- */}
+      <View style={tw`flex-1 bg-gray-50 rounded-t-3xl -mt-6 overflow-hidden`}>
+        {loading ? (
+          <View style={tw`flex-1 justify-center items-center`}>
+            <ActivityIndicator size="large" color="#166534" />
+            <Text style={tw`text-gray-500 text-sm mt-4 font-medium`}>
+              Loading Events...
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={tournaments}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => <TournamentCard tournament={item} />}
+            contentContainerStyle={tw`p-5 pb-20`}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <View style={tw`items-center justify-center mt-20 px-6`}>
+                <View style={tw`bg-green-100 p-6 rounded-full mb-4`}>
+                  <Ionicons name="trophy-outline" size={48} color="#15803d" />
+                </View>
+                <Text style={tw`text-xl font-bold text-gray-800 mb-2`}>
+                  No Active Tournaments
+                </Text>
+                <Text style={tw`text-gray-500 text-center leading-5`}>
+                  There are no live or upcoming tournaments right now. Please check back later!
+                </Text>
+              </View>
+            }
+          />
+        )}
+      </View>
     </SafeAreaView>
   );
 }

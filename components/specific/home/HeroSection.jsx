@@ -3,34 +3,35 @@ import tw from "twrnc";
 
 export default function HeroSection() {
   return (
-    // 'h-72' height di hai taake image badi aur clear dikhe
-    <View style={tw`w-full h-72 bg-gray-900`}>
+    // Outer Container: Margins + Rounded Corners + Shadow
+    <View style={tw` h-60 rounded-[32px] overflow-hidden shadow-lg bg-green-900`}>
       <ImageBackground
-        // Apni image ka path yahan lagayein
         source={require("../../../assets/images/hero-image.webp")} 
         resizeMode="cover"
         style={tw`flex-1 justify-end`}
       >
-        {/* Dark Overlay (Gradient effect ke liye taake text parha jaye) */}
+        {/* ✅ FIX: Maine yahan se 'bg-gradient-to-t' hata diya hai.
+           Uski jagah simple 'bg-black/40' lagaya hai jo sab devices par chalta hai.
+        */}
         <View style={tw`absolute inset-0 bg-black/40`} />
         
-        {/* Content Container with Padding */}
-        <View style={tw`p-6 pb-8`}>
+        {/* Content */}
+        <View style={tw`px-6 py-6`}>
           {/* Badge */}
-          <View style={tw`bg-green-600 self-start px-3 py-1 rounded-full mb-3`}>
-            <Text style={tw`text-white text-xs font-bold uppercase`}>
-              Play Now
+          <View style={tw`bg-green-500 self-start px-3 py-1.5 rounded-full mb-3 shadow-sm`}>
+            <Text style={tw`text-white text-[10px] font-bold uppercase tracking-wider`}>
+              Featured
             </Text>
           </View>
 
-          {/* Main Headline - Short & Impactful */}
-          <Text style={tw`text-3xl font-extrabold text-white shadow-md leading-tight`}>
-            Find Your Court
+          {/* Main Headline */}
+          <Text style={tw`text-2xl font-black text-white leading-tight mb-1`}>
+            Level Up Your Game
           </Text>
           
-          {/* Subtext - Simple One Liner */}
-          <Text style={tw`text-base text-gray-200 mt-1 shadow-sm font-medium pr-4`}>
-            Book top sports venues near you instantly.
+          {/* Subtext */}
+          <Text style={tw`text-sm text-gray-200 font-medium opacity-90`}>
+            Discover and book the best turfs in seconds.
           </Text>
         </View>
       </ImageBackground>

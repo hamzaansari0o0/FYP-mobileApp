@@ -1,4 +1,5 @@
 import * as Notifications from 'expo-notifications';
+// ❌ NavigationBar ko hata diya taake crash na ho
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
@@ -10,7 +11,7 @@ function RootLayoutNav() {
   const router = useRouter();
   const segments = useSegments(); 
 
-  // --- 🔔 NOTIFICATION LISTENER (Same as before) ---
+  // --- 🔔 NOTIFICATION LISTENER ---
   useEffect(() => {
     const subscription = Notifications.addNotificationResponseReceivedListener(response => {
       const data = response.notification.request.content.data;
@@ -21,15 +22,12 @@ function RootLayoutNav() {
     return () => subscription.remove();
   }, []);
 
-  // --- 🚦 SECURITY ROUTING LOGIC (UPDATED) ---
+  // --- 🚦 SECURITY ROUTING LOGIC ---
   useEffect(() => {
     if (loading) return; 
 
-    // 🔥 1. Check karein ke kya banda 'howItWorks' page par hai?
-    // Segments array check karta hai URL ke parts (e.g., ['(player)', 'home', 'howItWorks'])
+    // 1. Check Public Page
     const isPublicPage = segments.includes('howItWorks');
-
-    // 🔥 2. Agar ye Public Page hai, to Security Check mat lagao. Return kar jao.
     if (isPublicPage) return;
 
     const inAuthGroup = segments[0] === '(auth)';
@@ -45,12 +43,11 @@ function RootLayoutNav() {
         else if (role === 'admin') router.replace('/(admin)/dashboard');
       }
       
-      // OPTIONAL: Agar Owner ghalti se Player folder me ghus jaye (sivaye howItWorks ke), to wapis bhejo
+      // Role Protection
       if (role === 'owner' && inPlayerGroup) router.replace('/(owner)/dashboard');
 
     } else {
       // ❌ USER LOGGED OUT:
-      // Agar wo Protected Routes par jaye, to wapis Index par phek do
       if (inPlayerGroup || inOwnerGroup || inAdminGroup) {
         router.replace('/');
       }
@@ -60,7 +57,7 @@ function RootLayoutNav() {
   if (loading) {
     return (
       <View style={tw`flex-1 items-center justify-center bg-white`}>
-        <ActivityIndicator size="large" color={tw.color('blue-500')} />
+        <ActivityIndicator size="large" color={tw.color('green-600')} />
       </View>
     );
   }

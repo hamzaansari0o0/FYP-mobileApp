@@ -1,3 +1,4 @@
+import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { addDoc, collection, doc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
@@ -6,23 +7,27 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
-  Text, TextInput,
+  Text,
+  TextInput,
   View
 } from 'react-native';
 import tw from 'twrnc';
 import { db, storage } from '../../firebase/firebaseConfig';
 
+const SPORT_TYPES = ["Cricket", "Football", "Badminton", "Tennis", "Basketball", "Volleyball", "Other"];
+
 export default function CourtRegistrationForm({ user, onRegistrationSuccess }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-
-  // Arena data hold karne ke liye
   const [arenaData, setArenaData] = useState(null);
 
   const [formData, setFormData] = useState({
     courtName: '',
+    sportType: 'Cricket', // Default
     pricePerHour: '',
     bankName: '',
     accountNumber: '',
@@ -31,7 +36,7 @@ export default function CourtRegistrationForm({ user, onRegistrationSuccess }) {
   
   const [image, setImage] = useState(null);
 
-  // --- 🔥 Fetch Arena Data (Address + Location) on Mount ---
+  // --- Fetch Arena Data ---
   useEffect(() => {
     const fetchArenaData = async () => {
         try {
@@ -54,21 +59,21 @@ export default function CourtRegistrationForm({ user, onRegistrationSuccess }) {
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Denied', 'Need camera roll permissions.');
+      Alert.alert('Permission Denied', 'Need gallery permissions.');
       return;
     }
 
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
-      aspect: [4, 3],
+      aspect: [16, 9], // Cinematic aspect ratio
       quality: 0.7,
     });
 
     if (!result.canceled) {
       const asset = result.assets[0];
       if (asset.fileSize && asset.fileSize > 5 * 1024 * 1024) {
-        Alert.alert('Image Too Large', 'Max 5MB allowed.');
+        Alert.alert('File Too Large', 'Please upload an image smaller than 5MB.');
         return;
       }
       setImage(asset.uri);
@@ -87,9 +92,9 @@ export default function CourtRegistrationForm({ user, onRegistrationSuccess }) {
     });
     
     const fileRef = ref(storage, `courts/${user.uid}/court_${Date.now()}`);
-    
+    const uploadTask = uploadBytesResumable(fileRef, blob);
+
     return new Promise((resolve, reject) => {
-      const uploadTask = uploadBytesResumable(fileRef, blob);
       uploadTask.on('state_changed', 
         (snapshot) => {
           const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
@@ -110,12 +115,12 @@ export default function CourtRegistrationForm({ user, onRegistrationSuccess }) {
 
   const handleRegisterCourt = async () => {
     if (!formData.courtName || !formData.pricePerHour || !formData.bankName || !formData.accountNumber) {
-      Alert.alert('Missing Fields', 'Please fill all required fields.');
+      Alert.alert('Missing Fields', 'Please fill all required fields marked with *');
       return;
     }
     
     if (!image) {
-      Alert.alert('Missing Image', 'Please upload a court picture.');
+      Alert.alert('Missing Image', 'A court picture is required.');
       return;
     }
 
@@ -124,24 +129,18 @@ export default function CourtRegistrationForm({ user, onRegistrationSuccess }) {
 
     try {
       const courtImageURL = await uploadImageAsync(image);
-      setUploadProgress(100); 
       
       const newCourtData = {
         ownerId: user.uid,
         courtName: formData.courtName.trim(),
+        sportType: formData.sportType,
         pricePerHour: parseFloat(formData.pricePerHour),
-        
-        // 🔥 INHERIT LOCATION FROM ARENA
-        // Agar arena ke paas address hai to wo lelo, nahi to default
         address: arenaData?.arenaAddress || "Arena Address", 
-        // Agar arena ke paas lat/lng hai to wo lelo (CRITICAL for Player Maps)
         location: arenaData?.location || null,
-
         openTime: "00:00",
         closeTime: "23:00",
         courtImageURL: courtImageURL,
         status: 'pending', 
-        
         ownerBankDetails: {
           bankName: formData.bankName.trim(),
           accountNumber: formData.accountNumber.trim(),
@@ -152,133 +151,193 @@ export default function CourtRegistrationForm({ user, onRegistrationSuccess }) {
       };
 
       const docRef = await addDoc(collection(db, 'courts'), newCourtData);
-      
       Alert.alert('Success!', 'Court submitted for Admin Approval.');
-      
       if (onRegistrationSuccess) {
         onRegistrationSuccess(docRef.id, newCourtData);
       }
-
     } catch (error) {
       console.error('Error registering court: ', error);
       Alert.alert('Error', 'Registration failed. Please try again.');
     } finally {
       setIsSubmitting(false);
-      setUploadProgress(0);
     }
   };
   
-  const getButtonText = () => {
-    if (isSubmitting) return uploadProgress > 0 ? `Uploading... ${uploadProgress}%` : 'Submitting...';
-    return 'Submit Court for Approval';
-  };
-
   return (
-    <ScrollView contentContainerStyle={tw`p-6 pb-20`}>
-      <Text style={tw`text-3xl font-bold text-gray-800 mb-2`}>Add New Court</Text>
-      <Text style={tw`text-sm text-gray-500 mb-6`}>
-        Add details for a specific court. This will inherit location from your Arena.
-      </Text>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={tw`flex-1`}>
+    <ScrollView contentContainerStyle={tw`p-5 pb-24`} showsVerticalScrollIndicator={false}>
       
-      {/* Location Info Box (Auto-filled) */}
-      <View style={tw`bg-blue-50 p-4 rounded-lg mb-6 border border-blue-100`}>
-        <Text style={tw`text-blue-800 font-bold mb-1`}>📍 Location Info</Text>
-        <Text style={tw`text-gray-700 text-sm`}>
-            {arenaData?.arenaAddress ? arenaData.arenaAddress : "Loading Arena Location..."}
+      {/* 1. Basic Info Section */}
+      <View style={tw`bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-5`}>
+        <Text style={tw`text-base font-bold text-gray-800 mb-4 flex-row items-center`}>
+            <MaterialCommunityIcons name="information-outline" size={18} color="black" /> Basic Information
         </Text>
-        <Text style={tw`text-xs text-blue-500 mt-2`}>
-            (This court will be registered at your Arena's location automatically.)
-        </Text>
-      </View>
 
-      {/* Court Name */}
-      <Text style={tw`text-lg font-semibold mb-2 text-gray-700`}>Court Name</Text>
-      <TextInput
-        style={tw`border border-gray-300 p-4 rounded-lg mb-4 text-base bg-white`}
-        placeholder="e.g., Futsal Ground A"
-        value={formData.courtName}
-        onChangeText={(val) => handleInputChange('courtName', val)}
-      />
-      
-      {/* Price */}
-      <Text style={tw`text-lg font-semibold mb-2 text-gray-700`}>Price (per hour)</Text>
-      <TextInput
-        style={tw`border border-gray-300 p-4 rounded-lg mb-4 text-base bg-white`}
-        placeholder="e.g., 2000"
-        value={formData.pricePerHour}
-        onChangeText={(val) => handleInputChange('pricePerHour', val)}
-        keyboardType="numeric"
-      />
-
-      {/* Image Picker */}
-      <Text style={tw`text-lg font-semibold mb-2 text-gray-700`}>Court Picture</Text>
-      {image ? (
+        {/* Court Name */}
         <View style={tw`mb-4`}>
-          <Image source={{ uri: image }} style={tw`w-full h-48 rounded-lg mb-2`} resizeMode="cover" />
-          <Pressable onPress={pickImage}>
-            <Text style={tw`text-blue-600 text-center font-bold`}>Change Image</Text>
-          </Pressable>
+            <Text style={tw`text-xs font-semibold text-gray-500 mb-1.5 ml-1`}>Court Name *</Text>
+            <View style={tw`flex-row items-center border border-gray-200 rounded-xl px-3 bg-gray-50 focus:border-green-500`}>
+                <Ionicons name="text-outline" size={20} color="gray" />
+                <TextInput
+                    style={tw`flex-1 p-3 text-gray-800 text-sm`}
+                    placeholder="e.g. Center Pitch A"
+                    value={formData.courtName}
+                    onChangeText={(val) => handleInputChange('courtName', val)}
+                />
+            </View>
         </View>
-      ) : (
-        <Pressable
-          style={tw`border-2 border-dashed border-gray-300 bg-gray-50 p-6 rounded-lg mb-6 items-center`}
-          onPress={pickImage}
-          disabled={isSubmitting}
-        >
-          <Text style={tw`text-gray-500 font-semibold`}>+ Upload Court Photo</Text>
-        </Pressable>
-      )}
 
-      {/* Bank Details Header */}
-      <View style={tw`bg-gray-100 p-4 rounded-lg mb-4 border border-gray-200`}>
-        <Text style={tw`text-lg font-bold text-gray-800 mb-2`}>Bank Details for Payouts</Text>
-        <Text style={tw`text-xs text-gray-600`}>
-           Payments will be sent to this account.
-        </Text>
+        {/* Price */}
+        <View style={tw`mb-4`}>
+            <Text style={tw`text-xs font-semibold text-gray-500 mb-1.5 ml-1`}>Hourly Rate (PKR) *</Text>
+            <View style={tw`flex-row items-center border border-gray-200 rounded-xl px-3 bg-gray-50`}>
+                <Text style={tw`text-gray-500 font-bold text-lg mr-1`}>Rs.</Text>
+                <TextInput
+                    style={tw`flex-1 p-3 text-gray-800 text-sm`}
+                    placeholder="e.g. 2500"
+                    value={formData.pricePerHour}
+                    onChangeText={(val) => handleInputChange('pricePerHour', val)}
+                    keyboardType="numeric"
+                />
+            </View>
+        </View>
+
+        {/* Sport Type Chips */}
+        <View>
+            <Text style={tw`text-xs font-semibold text-gray-500 mb-2 ml-1`}>Sport Type *</Text>
+            <View style={tw`flex-row flex-wrap gap-2`}>
+                {SPORT_TYPES.map((sport) => (
+                    <Pressable
+                        key={sport}
+                        onPress={() => handleInputChange('sportType', sport)}
+                        style={tw`px-3 py-1.5 rounded-full border ${formData.sportType === sport ? 'bg-green-600 border-green-600' : 'bg-white border-gray-200'}`}
+                    >
+                        <Text style={tw`text-xs font-medium ${formData.sportType === sport ? 'text-white' : 'text-gray-600'}`}>
+                            {sport}
+                        </Text>
+                    </Pressable>
+                ))}
+            </View>
+        </View>
       </View>
-      
-      <Text style={tw`text-lg font-semibold mb-2 text-gray-700`}>Bank Name</Text>
-      <TextInput
-        style={tw`border border-gray-300 p-4 rounded-lg mb-4 text-base bg-white`}
-        placeholder="e.g., Meezan Bank"
-        value={formData.bankName}
-        onChangeText={(val) => handleInputChange('bankName', val)}
-      />
-      
-      <Text style={tw`text-lg font-semibold mb-2 text-gray-700`}>Account Number (IBAN)</Text>
-      <TextInput
-        style={tw`border border-gray-300 p-4 rounded-lg mb-4 text-base bg-white`}
-        placeholder="PK..."
-        value={formData.accountNumber}
-        onChangeText={(val) => handleInputChange('accountNumber', val)}
-      />
-      
-      <Text style={tw`text-lg font-semibold mb-2 text-gray-700`}>JazzCash / EasyPaisa (Optional)</Text>
-      <TextInput
-        style={tw`border border-gray-300 p-4 rounded-lg mb-8 text-base bg-white`}
-        placeholder="0300-1234567"
-        value={formData.jazzCash}
-        onChangeText={(val) => handleInputChange('jazzCash', val)}
-        keyboardType="phone-pad"
-      />
+
+      {/* 2. Image Upload Section */}
+      <View style={tw`bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-5`}>
+         <Text style={tw`text-base font-bold text-gray-800 mb-3`}>
+             <Feather name="image" size={18} /> Court Image
+         </Text>
+         
+         {image ? (
+            <View style={tw`relative rounded-xl overflow-hidden shadow-sm`}>
+                <Image source={{ uri: image }} style={tw`w-full h-48`} resizeMode="cover" />
+                <Pressable 
+                    onPress={pickImage}
+                    style={tw`absolute bottom-2 right-2 bg-black/70 px-3 py-1.5 rounded-full flex-row items-center`}
+                >
+                    <Feather name="edit" size={14} color="white" style={tw`mr-1`} />
+                    <Text style={tw`text-white text-xs font-bold`}>Change</Text>
+                </Pressable>
+            </View>
+         ) : (
+            <Pressable
+                onPress={pickImage}
+                style={tw`h-44 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50 items-center justify-center`}
+            >
+                <View style={tw`bg-green-100 p-3 rounded-full mb-2`}>
+                    <Ionicons name="camera-outline" size={24} color={tw.color('green-700')} />
+                </View>
+                <Text style={tw`text-gray-500 font-medium text-sm`}>Tap to upload court photo</Text>
+                <Text style={tw`text-gray-400 text-xs mt-1`}>Max 5MB (JPG/PNG)</Text>
+            </Pressable>
+         )}
+      </View>
+
+      {/* 3. Location (Read-Only) */}
+      <View style={tw`bg-blue-50 p-4 rounded-xl border border-blue-100 mb-5 flex-row items-start`}>
+         <Ionicons name="location" size={20} color={tw.color('blue-600')} style={tw`mr-2 mt-0.5`} />
+         <View style={tw`flex-1`}>
+            <Text style={tw`text-blue-900 font-bold text-sm mb-1`}>Location Linked to Arena</Text>
+            <Text style={tw`text-blue-800 text-xs leading-4 mb-1`}>
+                {arenaData?.arenaAddress || "Loading Address..."}
+            </Text>
+            <Text style={tw`text-blue-400 text-[10px] italic`}>
+                This court will automatically appear at your arena's location.
+            </Text>
+         </View>
+      </View>
+
+      {/* 4. Bank Details */}
+      <View style={tw`bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-8`}>
+        <Text style={tw`text-base font-bold text-gray-800 mb-4 flex-row items-center`}>
+            <MaterialCommunityIcons name="bank-outline" size={18} /> Payout Details
+        </Text>
+
+        <View style={tw`mb-4`}>
+            <Text style={tw`text-xs font-semibold text-gray-500 mb-1.5 ml-1`}>Bank Name *</Text>
+            <View style={tw`flex-row items-center border border-gray-200 rounded-xl px-3 bg-gray-50`}>
+                <MaterialCommunityIcons name="bank" size={18} color="gray" />
+                <TextInput
+                    style={tw`flex-1 p-3 text-gray-800 text-sm`}
+                    placeholder="e.g. HBL / Meezan"
+                    value={formData.bankName}
+                    onChangeText={(val) => handleInputChange('bankName', val)}
+                />
+            </View>
+        </View>
+
+        <View style={tw`mb-4`}>
+            <Text style={tw`text-xs font-semibold text-gray-500 mb-1.5 ml-1`}>Account Number / IBAN *</Text>
+            <View style={tw`flex-row items-center border border-gray-200 rounded-xl px-3 bg-gray-50`}>
+                <MaterialCommunityIcons name="card-account-details-outline" size={18} color="gray" />
+                <TextInput
+                    style={tw`flex-1 p-3 text-gray-800 text-sm`}
+                    placeholder="Account Number"
+                    value={formData.accountNumber}
+                    onChangeText={(val) => handleInputChange('accountNumber', val)}
+                />
+            </View>
+        </View>
+
+        <View>
+            <Text style={tw`text-xs font-semibold text-gray-500 mb-1.5 ml-1`}>JazzCash / EasyPaisa (Optional)</Text>
+            <View style={tw`flex-row items-center border border-gray-200 rounded-xl px-3 bg-gray-50`}>
+                <Feather name="smartphone" size={18} color="gray" />
+                <TextInput
+                    style={tw`flex-1 p-3 text-gray-800 text-sm`}
+                    placeholder="0300-XXXXXXX"
+                    value={formData.jazzCash}
+                    onChangeText={(val) => handleInputChange('jazzCash', val)}
+                    keyboardType="phone-pad"
+                />
+            </View>
+        </View>
+      </View>
 
       {/* Submit Button */}
       <Pressable
         style={tw.style(
-          `bg-green-600 py-4 rounded-lg shadow-md mb-10`,
-          isSubmitting && `bg-green-400`
+          `bg-green-700 py-4 rounded-xl shadow-md flex-row justify-center items-center`,
+          isSubmitting && `bg-green-500`
         )}
         onPress={handleRegisterCourt}
         disabled={isSubmitting}
       >
         {isSubmitting ? (
-          <ActivityIndicator color={tw.color('white')} />
+          <>
+            <ActivityIndicator color="white" style={tw`mr-2`} />
+            <Text style={tw`text-white font-bold text-base`}>
+                {uploadProgress > 0 && uploadProgress < 100 ? `Uploading Image ${uploadProgress}%` : 'Submitting...'}
+            </Text>
+          </>
         ) : (
-          <Text style={tw`text-white text-center text-lg font-bold`}>
-            {getButtonText()}
-          </Text>
+          <>
+             <Ionicons name="checkmark-circle" size={20} color="white" style={tw`mr-2`} />
+             <Text style={tw`text-white font-bold text-base`}>Submit Court</Text>
+          </>
         )}
       </Pressable>
+
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }

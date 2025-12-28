@@ -18,16 +18,33 @@ export default function PlayerTabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        // 👇 Change: Active color ab Black hai
-        tabBarActiveTintColor: "black", 
-        tabBarInactiveTintColor: tw.color("gray-400"),
         
-        // Dynamic Style to Hide Tab Bar (Height/Width unchanged)
+        // 🎨 COLORS (Owner Theme Match)
+        tabBarActiveTintColor: "#ffffff", // Selected: Pora White
+        tabBarInactiveTintColor: "#86efac", // Unselected: Light Green
+
+        // 🖌️ STYLE (Floating Dark Green Bar)
         tabBarStyle: {
-          display: shouldHideTabBar ? 'none' : 'flex', 
-          ...tw`bg-white border-t border-gray-200 `,
+          // Agar hide karna hai to display 'none', warna 'flex'
+          display: shouldHideTabBar ? 'none' : 'flex',
+
+          ...tw`bg-green-900 border-t-0 shadow-lg`, // Dark Green + Shadow
+          
+          position: 'absolute', // 1. Float karwaya
+          bottom: 40,           // 2. Bottom se oopar
+          left: 16,             // 3. Sides se gap
+          right: 16,
+          borderRadius: 25,     // 4. Round corners
+          height: 65,
+          width:350,
+          marginLeft:5,
+          paddingBottom: 10,    // Center alignment adjustment
+          paddingTop: 10,
+          elevation: 5,         // Android Shadow
         },
-        tabBarLabelStyle: tw`text-xs font-medium mb-1`,
+
+        // 📝 LABEL STYLE
+        tabBarLabelStyle: tw`text-[9px] font-medium mb-1`,
       }}
     >
       {/* Tab 1: Home */}
@@ -35,25 +52,25 @@ export default function PlayerTabLayout() {
         name="home"
         options={{
           title: "Home",
-          tabBarIcon: ({ color, size, focused }) => (
+          tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? "home" : "home-outline"}
-              size={size}
+              size={24}
               color={color}
             />
           ),
         }}
       />
 
-      {/* Tab 2: My Bookings */}
+      {/* Tab 2: My Bookings (History) */}
       <Tabs.Screen
         name="history"
         options={{
           title: "My Bookings",
-          tabBarIcon: ({ color, size, focused }) => (
+          tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? "calendar" : "calendar-outline"}
-              size={size}
+              size={24}
               color={color}
             />
           ),
@@ -65,10 +82,10 @@ export default function PlayerTabLayout() {
         name="chat"
         options={{
           title: "Chat",
-          tabBarIcon: ({ color, size, focused }) => (
+          tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? "chatbubbles" : "chatbubbles-outline"}
-              size={size}
+              size={24}
               color={color}
             />
           ),
@@ -80,17 +97,19 @@ export default function PlayerTabLayout() {
         name="profile"
         options={{
           title: "Profile",
-          tabBarIcon: ({ color, size, focused }) => (
+          tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? "person-circle" : "person-circle-outline"}
-              size={size}
+              size={26}
               color={color}
             />
           ),
         }}
       />
 
-      {/* Hidden Tab: Schedule */}
+      {/* --- HIDDEN TABS --- */}
+      
+      {/* Hidden: Schedule */}
       <Tabs.Screen
         name="schedule" 
         options={{
@@ -98,11 +117,11 @@ export default function PlayerTabLayout() {
         }}
       />
 
-      {/* 🔥 NEW HIDDEN TAB: Notifications */}
+      {/* Hidden: Notifications */}
       <Tabs.Screen
         name="notifications" 
         options={{
-          href: null, // Ye Tab Bar mein button nahi banaye ga
+          href: null,
         }}
       />
       

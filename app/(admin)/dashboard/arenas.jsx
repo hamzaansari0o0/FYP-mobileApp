@@ -1,52 +1,63 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { collection, doc, getDocs, query, updateDoc, where } from 'firebase/firestore';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Pressable, StatusBar, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
 import { db } from '../../../firebase/firebaseConfig';
-// 🔥 Notification Helper Import
 import { notifyUser } from '../../../utils/notifications';
 
+// --- Header ---
 const AdminHeader = ({ title, onBack }) => (
-  <View style={tw`flex-row items-center mb-5`}>
-    <Pressable onPress={onBack} style={tw`p-2`}>
-      <Ionicons name="arrow-back-outline" size={28} color={tw.color('purple-800')} />
+  <View style={tw`flex-row items-center mb-6 pt-2`}>
+    <Pressable onPress={onBack} style={tw`bg-gray-50 p-2 rounded-xl mr-3 border border-gray-200`}>
+      <Ionicons name="arrow-back" size={20} color="#374151" />
     </Pressable>
-    <Text style={tw`text-3xl font-bold text-purple-800 ml-3`}>{title}</Text>
+    <View style={tw`flex-1 flex-row items-center`}>
+        <View style={tw`bg-purple-600 p-2 rounded-lg mr-2`}>
+            <MaterialIcons name="stadium" size={18} color="white" />
+        </View>
+        <Text style={tw`text-xl font-bold text-gray-900`}>{title}</Text>
+    </View>
   </View>
 );
 
+// --- Arena Card ---
 const ArenaManageCard = ({ arena, onDisable, onEnable, onViewCourts }) => {
   const isEnabled = arena.status !== 'disabled';
   return (
-    <Pressable 
-      onPress={() => onViewCourts(arena.id)} 
-      style={tw`bg-white p-4 rounded-lg shadow-md mb-4 border border-gray-100`}
-    >
-      <View style={tw`flex-row justify-between items-start`}>
+    <View style={tw`bg-white p-4 rounded-2xl shadow-sm border border-purple-50 mb-3`}>
+      <Pressable onPress={() => onViewCourts(arena.id)} style={tw`flex-row justify-between items-center mb-3`}>
         <View style={tw`flex-1`}>
-          <Text style={tw`text-xl font-bold text-gray-800`}>{arena.arenaName}</Text>
-          <Text style={tw`text-base text-gray-600 mt-1`}>{arena.arenaAddress}</Text>
-          <Text style={tw`text-sm text-gray-500 mt-1`}>Owner: {arena.name}</Text>
+          <Text style={tw`text-base font-bold text-gray-900`} numberOfLines={1}>{arena.arenaName}</Text>
+          <Text style={tw`text-xs text-gray-500 mt-0.5`} numberOfLines={1}>Owner: {arena.name}</Text>
+          <Text style={tw`text-[10px] text-gray-400 mt-0.5`} numberOfLines={1}>{arena.arenaAddress}</Text>
         </View>
-        <Ionicons name="chevron-forward" size={24} color={tw.color('gray-400')} />
-      </View>
-      <View style={tw`flex-row justify-between items-center mt-4 pt-3 border-t border-gray-100`}>
-        <Text style={tw`font-bold ${isEnabled ? 'text-green-600' : 'text-red-600'}`}>
-            Status: {arena.status ? arena.status.toUpperCase() : 'UNKNOWN'}
-        </Text>
+        <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
+      </Pressable>
+
+      <View style={tw`border-t border-gray-100 pt-3 flex-row justify-between items-center`}>
+         <View style={tw`bg-gray-50 px-2 py-1 rounded`}>
+            <Text style={tw`text-[10px] font-bold text-gray-500 uppercase tracking-wide`}>
+                {arena.status || 'UNKNOWN'}
+            </Text>
+         </View>
+
         <Pressable
-          style={tw`py-2 px-4 rounded-lg ${isEnabled ? 'bg-red-100' : 'bg-green-100'}`}
+          style={({ pressed }) => tw.style(
+            `px-3 py-1.5 rounded-lg border flex-row items-center`,
+            isEnabled ? `bg-red-50 border-red-100` : `bg-green-50 border-green-100`,
+            pressed && `opacity-70`
+          )}
           onPress={() => isEnabled ? onDisable(arena) : onEnable(arena)}
         >
-          <Text style={tw`font-bold ${isEnabled ? 'text-red-700' : 'text-green-700'}`}>
+          <Text style={tw`text-[10px] font-bold ${isEnabled ? 'text-red-700' : 'text-green-700'}`}>
             {isEnabled ? 'Disable Arena' : 'Enable Arena'}
           </Text>
         </Pressable>
       </View>
-    </Pressable>
+    </View>
   );
 };
 
@@ -70,22 +81,14 @@ export default function ManageArenasScreen() {
   const handleDisable = async (arena) => {
     Alert.alert(
         "Disable Arena?",
-        `This will hide '${arena.arenaName}' and ALL its courts from players.`,
+        `This will hide '${arena.arenaName}' from players.`,
         [
             { text: "Cancel", style: "cancel" },
             { 
                 text: "Disable", style: "destructive", 
                 onPress: async () => {
                     await updateDoc(doc(db, 'users', arena.id), { status: 'disabled' });
-                    
-                    // 🔥 Notify Owner
-                    await notifyUser(
-                      arena.id, 
-                      "Arena Disabled 🛡️", 
-                      `Admin has disabled your arena '${arena.arenaName}'. Your courts are now hidden from players.`,
-                      "alert"
-                    );
-
+                    await notifyUser(arena.id, "Arena Disabled 🛡️", `Your arena '${arena.arenaName}' is hidden.`, "alert");
                     setArenas(prev => prev.map(a => a.id === arena.id ? { ...a, status: 'disabled' } : a));
                 }
             }
@@ -95,28 +98,22 @@ export default function ManageArenasScreen() {
 
   const handleEnable = async (arena) => {
     await updateDoc(doc(db, 'users', arena.id), { status: 'approved' });
-    
-    // 🔥 Notify Owner
-    await notifyUser(
-      arena.id, 
-      "Arena Activated! ✅", 
-      `Good news! Your arena '${arena.arenaName}' is now active and visible to players.`,
-      "booking"
-    );
-
+    await notifyUser(arena.id, "Arena Activated! ✅", `Your arena '${arena.arenaName}' is now visible.`, "booking");
     setArenas(prev => prev.map(a => a.id === arena.id ? { ...a, status: 'approved' } : a));
   };
 
   const handleViewCourts = (ownerId) => {
+    // Make sure this route exists in your folder structure
     router.push(`/(admin)/dashboard/arenaCourts/${ownerId}`);
   };
 
   return (
-    <SafeAreaView style={tw`flex-1 bg-gray-100`}>
-      <View style={tw`p-5`}>
+    <SafeAreaView style={tw`flex-1 bg-white`}>
+      <StatusBar barStyle="dark-content" />
+      <View style={tw`flex-1 px-5`}>
         <AdminHeader title="Manage Arenas" onBack={() => router.back()} />
         {loading ? (
-          <ActivityIndicator size="large" color={tw.color('purple-600')} />
+          <ActivityIndicator size="small" color="#9333ea" style={tw`mt-10`} />
         ) : (
           <FlatList
             data={arenas}
@@ -124,7 +121,8 @@ export default function ManageArenasScreen() {
             renderItem={({ item }) => (
               <ArenaManageCard arena={item} onDisable={handleDisable} onEnable={handleEnable} onViewCourts={handleViewCourts} />
             )}
-            ListEmptyComponent={<Text>No active arenas found.</Text>}
+            contentContainerStyle={tw`pb-10`}
+            ListEmptyComponent={<Text style={tw`text-center text-gray-400 mt-10 text-sm`}>No active arenas found.</Text>}
           />
         )}
       </View>

@@ -2,49 +2,64 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { collection, doc, getDocs, updateDoc } from 'firebase/firestore';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Pressable, StatusBar, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
 import { db } from '../../../firebase/firebaseConfig';
-// 🔥 Notification helper import kiya
 import { notifyUser } from '../../../utils/notifications';
 
+// --- Header Component ---
 const AdminHeader = ({ title, onBack }) => (
-  <View style={tw`flex-row items-center mb-5`}>
-    <Pressable onPress={onBack} style={tw`p-2`}>
-      <Ionicons name="arrow-back-outline" size={28} color={tw.color('purple-800')} />
+  <View style={tw`flex-row items-center mb-6 pt-2`}>
+    <Pressable onPress={onBack} style={tw`bg-gray-50 p-2 rounded-xl mr-3 border border-gray-200`}>
+      <Ionicons name="arrow-back" size={20} color="#374151" />
     </Pressable>
-    <Text style={tw`text-3xl font-bold text-purple-800 ml-3`}>{title}</Text>
+    <View style={tw`flex-1 flex-row items-center`}>
+        <View style={tw`bg-purple-600 p-2 rounded-lg mr-2`}>
+            <Ionicons name="people" size={18} color="white" />
+        </View>
+        <Text style={tw`text-xl font-bold text-gray-900`}>{title}</Text>
+    </View>
   </View>
 );
 
+// --- User Card ---
 const UserCard = ({ user, onDisable, onEnable }) => {
   const isEnabled = user.status !== 'disabled';
   return (
-    <View style={tw`bg-white p-4 rounded-lg shadow-md mb-4`}>
+    <View style={tw`bg-white p-4 rounded-2xl shadow-sm border border-purple-50 mb-3`}>
       <View style={tw`flex-row justify-between items-start`}>
-        <View>
-          <Text style={tw`text-xl font-bold text-gray-800`}>{user.name}</Text>
-          <Text style={tw`text-base text-gray-600 mt-1`}>{user.email}</Text>
-          <Text style={tw`text-sm font-semibold text-purple-600 mt-1`}>
-            Role: {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
-          </Text>
+        <View style={tw`flex-1`}>
+            <View style={tw`flex-row items-center mb-1`}>
+                <Text style={tw`text-base font-bold text-gray-900 mr-2`}>{user.name}</Text>
+                <View style={tw`bg-purple-100 px-2 py-0.5 rounded`}>
+                    <Text style={tw`text-[10px] font-bold text-purple-700 uppercase`}>{user.role}</Text>
+                </View>
+            </View>
+            <Text style={tw`text-xs text-gray-500`}>{user.email}</Text>
         </View>
-        <Text style={tw.style(
-          `text-xs font-bold px-2 py-1 rounded-full`,
-          isEnabled ? `bg-green-100 text-green-800` : `bg-red-100 text-red-800`
-        )}>
-          {isEnabled ? 'Active' : 'Disabled'}
-        </Text>
+
+        {/* Status Pill */}
+        <View style={tw`px-2 py-1 rounded-md ${isEnabled ? 'bg-green-50' : 'bg-red-50'}`}>
+             <Text style={tw`text-[10px] font-bold ${isEnabled ? 'text-green-700' : 'text-red-700'}`}>
+                {isEnabled ? 'ACTIVE' : 'DISABLED'}
+             </Text>
+        </View>
       </View>
       
-      <View style={tw`flex-row justify-end mt-4 pt-3 border-t border-gray-200`}>
+      {/* Action Button */}
+      <View style={tw`mt-4 pt-3 border-t border-gray-100 flex-row justify-end`}>
         <Pressable
-          style={tw`py-2 px-5 rounded-lg ${isEnabled ? 'bg-yellow-500' : 'bg-green-500'}`}
+          style={({ pressed }) => tw.style(
+            `px-4 py-2 rounded-lg border flex-row items-center`,
+            isEnabled ? `bg-red-50 border-red-100` : `bg-green-50 border-green-100`,
+            pressed && `opacity-70`
+          )}
           onPress={() => isEnabled ? onDisable(user) : onEnable(user)}
         >
-          <Text style={tw`text-white font-bold`}>
-            {isEnabled ? 'Disable User' : 'Enable User'}
+          <Ionicons name={isEnabled ? "ban-outline" : "checkmark-circle-outline"} size={14} color={isEnabled ? "#b91c1c" : "#15803d"} style={tw`mr-1.5`} />
+          <Text style={tw`text-xs font-bold ${isEnabled ? 'text-red-700' : 'text-green-700'}`}>
+            {isEnabled ? 'Disable Access' : 'Enable Access'}
           </Text>
         </Pressable>
       </View>
@@ -76,19 +91,10 @@ export default function ManageUsersScreen() {
     }
   };
 
-  // --- 🛡️ Disable User Action ---
   const handleDisable = async (user) => {
     try {
       await updateDoc(doc(db, 'users', user.uid), { status: 'disabled' });
-      
-      // 🔥 Send Push & History Notification
-      await notifyUser(
-        user.uid, 
-        "Account Suspended 🛡️", 
-        "Hi " + user.name + ", your account has been disabled by the admin. Please contact support.",
-        "alert"
-      );
-
+      await notifyUser(user.uid, "Account Suspended 🛡️", "Your account has been disabled. Contact support.", "alert");
       Alert.alert('Success', 'User disabled & notified.');
       setUsers(prev => prev.map(u => u.uid === user.uid ? { ...u, status: 'disabled' } : u));
     } catch (error) {
@@ -96,19 +102,10 @@ export default function ManageUsersScreen() {
     }
   };
 
-  // --- ✅ Enable User Action ---
   const handleEnable = async (user) => {
     try {
       await updateDoc(doc(db, 'users', user.uid), { status: 'active' });
-
-      // 🔥 Send Push & History Notification
-      await notifyUser(
-        user.uid, 
-        "Account Activated ✅", 
-        "Welcome back! Your account has been re-enabled. You can now use the app.",
-        "alert"
-      );
-
+      await notifyUser(user.uid, "Account Activated ✅", "Welcome back! Your account is active.", "alert");
       Alert.alert('Success', 'User enabled & notified.');
       setUsers(prev => prev.map(u => u.uid === user.uid ? { ...u, status: 'active' } : u));
     } catch (error) {
@@ -117,11 +114,12 @@ export default function ManageUsersScreen() {
   };
 
   return (
-    <SafeAreaView style={tw`flex-1 bg-gray-100`}>
-      <View style={tw`p-5`}>
+    <SafeAreaView style={tw`flex-1 bg-white`}>
+      <StatusBar barStyle="dark-content" />
+      <View style={tw`flex-1 px-5`}>
         <AdminHeader title="Manage Users" onBack={() => router.back()} />
         {loading ? (
-          <ActivityIndicator size="large" color={tw.color('purple-600')} />
+          <ActivityIndicator size="small" color="#9333ea" style={tw`mt-10`} />
         ) : (
           <FlatList
             data={users}
@@ -129,7 +127,8 @@ export default function ManageUsersScreen() {
             renderItem={({ item }) => (
               <UserCard user={item} onDisable={handleDisable} onEnable={handleEnable} />
             )}
-            ListEmptyComponent={<Text>No users found.</Text>}
+            contentContainerStyle={tw`pb-10`}
+            ListEmptyComponent={<Text style={tw`text-center text-gray-400 mt-10 text-sm`}>No users found.</Text>}
           />
         )}
       </View>

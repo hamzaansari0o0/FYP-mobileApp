@@ -1,13 +1,3 @@
-import { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  Text,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import {
@@ -24,12 +14,23 @@ import {
   where,
   writeBatch
 } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  StatusBar,
+  Text,
+  View
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
+// Ensure paths are correct based on your folder structure
 import MatchScheduleList from '../../../../components/specific/tournaments/MatchScheduleList';
 import RegisteredTeamList from '../../../../components/specific/tournaments/RegisteredTeamList';
 import { useAuth } from '../../../../context/AuthContext';
 import { db } from '../../../../firebase/firebaseConfig';
-import { notifyUser } from '../../../../utils/notifications'; // Import Notification Helper
+import { notifyUser } from '../../../../utils/notifications';
 
 export default function ManageTournamentScreen() {
   const { tournamentId } = useLocalSearchParams();
@@ -57,7 +58,8 @@ export default function ManageTournamentScreen() {
         setTournament({ id: docSnap.id, ...docSnap.data() });
       } else {
         Alert.alert("Error", "Tournament not found.");
-        router.back();
+        // Agar tournament delete ho jaye to list par wapis bhejein
+        router.replace('/(owner)/tournaments'); 
       }
     }, (error) => {
       console.error("Error listening to tournament: ", error);
@@ -126,7 +128,6 @@ export default function ManageTournamentScreen() {
       power *= 2; totalRounds++;
     }
     const numByes = power - N;
-    const numTeamsInRound1 = N - numByes;
     let currentRoundTeams = [];
     let matchCounter = 1;
 
@@ -196,7 +197,7 @@ export default function ManageTournamentScreen() {
       batch.update(tourRef, { status: 'live', totalRounds: totalRounds });
       await batch.commit();
 
-      // 🔥 NOTIFY REGISTERED TEAMS: Schedule Live
+      // 🔥 NOTIFY REGISTERED TEAMS
       await notifyRegisteredTeams(
           "Schedule Live! 🗓️",
           `The match bracket for ${tournament.tournamentName} has been generated. Check who you're playing against!`,
@@ -281,7 +282,8 @@ export default function ManageTournamentScreen() {
               });
               
               Alert.alert("Success", "Tournament has been cancelled.");
-              router.back(); 
+              // Cancel hone ke baad list par wapis
+              router.navigate('/(owner)/tournaments'); 
 
             } catch (error) {
               Alert.alert("Cancellation Failed", error.message);
@@ -292,56 +294,109 @@ export default function ManageTournamentScreen() {
     );
   };
 
-  if (loading) { return <SafeAreaView style={tw`flex-1 justify-center`}><ActivityIndicator size="large" /></SafeAreaView>; }
-  if (!tournament) { return <SafeAreaView><Text>Tournament not found.</Text></SafeAreaView>; }
+  if (loading) { 
+      return (
+        <View style={tw`flex-1 justify-center items-center bg-gray-50`}>
+            <Stack.Screen options={{ headerShown: false }} />
+            <ActivityIndicator size="large" color={tw.color('green-700')} />
+        </View>
+      ); 
+  }
+
+  if (!tournament) return null;
+
   if (isGenerating) {
      return (
-        <SafeAreaView style={tw`flex-1 justify-center items-center`}>
-            <ActivityIndicator size="large" />
-            <Text style={tw`mt-3 text-lg`}>Generating Schedule...</Text>
-        </SafeAreaView>
+        <View style={tw`flex-1 justify-center items-center bg-gray-50`}>
+           <Stack.Screen options={{ headerShown: false }} />
+           <ActivityIndicator size="large" color={tw.color('green-700')} />
+           <Text style={tw`mt-4 text-base font-semibold text-gray-600`}>Generating Bracket...</Text>
+        </View>
      );
   }
 
   return (
-    <SafeAreaView style={tw`flex-1 bg-gray-100`}>
-      <Stack.Screen options={{ title: tournament.tournamentName }} />
+    <View style={tw`flex-1 bg-gray-50`}>
+      {/* 🛑 Hide Default Header */}
+      <Stack.Screen options={{ headerShown: false }} />
       
+      <StatusBar barStyle="light-content" backgroundColor="#14532d" />
+
+      {/* 🟢 CUSTOM HEADER */}
+      <View style={{ backgroundColor: '#14532d' }}>
+         <SafeAreaView edges={['top', 'left', 'right']} style={tw`px-4 pb-4 pt-2`}>
+            <View style={tw`flex-row items-center justify-between`}>
+               <View style={tw`flex-row items-center flex-1`}>
+                  {/* 🛑 FIX: Back arrow ab specifically 'Tournaments List' par le kar jayega */}
+                  <Pressable 
+                    onPress={() => router.navigate('/(owner)/tournaments')} 
+                    style={tw`mr-3 p-1`}
+                  >
+                     <Ionicons name="arrow-back" size={24} color="white" />
+                  </Pressable>
+                  <View style={tw`flex-1`}>
+                     <Text style={tw`text-lg font-bold text-white`} numberOfLines={1}>
+                        {tournament.tournamentName}
+                     </Text>
+                     <Text style={tw`text-xs text-green-200 capitalize`}>
+                        {tournament.status.replace('_', ' ')}
+                     </Text>
+                  </View>
+               </View>
+            </View>
+         </SafeAreaView>
+      </View>
+
+      {/* 🟢 MANAGEMENT BAR (Only for Open Registration) */}
       {tournament.status === 'registration_open' && (
-        <View style={tw`p-3 bg-white border-b border-gray-200 flex-row justify-around flex-wrap`}>
-          <Pressable 
-            style={tw`bg-blue-100 py-2 px-4 rounded-lg flex-row items-center mb-2`}
+        <View style={tw`bg-white px-4 py-3 border-b border-gray-100 flex-row justify-between items-center shadow-sm z-10`}>
+           <Pressable 
+            style={({pressed}) => [
+                tw`flex-1 flex-row justify-center items-center bg-blue-50 py-2.5 rounded-lg mr-2 border border-blue-100`,
+                pressed && tw`bg-blue-100`
+            ]}
             onPress={() => router.push(`/(owner)/tournaments/edit/${tournamentId}`)}
-          >
-            <Ionicons name="pencil-outline" size={18} color={tw.color('blue-700')} />
-            <Text style={tw`text-blue-700 font-semibold ml-2`}>Edit Details</Text>
-          </Pressable>
-          
-          {tournament.registeredTeamCount === 0 && (
+           >
+            <Ionicons name="create-outline" size={18} color={tw.color('blue-700')} />
+            <Text style={tw`text-blue-700 font-bold text-sm ml-2`}>Edit Info</Text>
+           </Pressable>
+
+           {tournament.registeredTeamCount === 0 ? (
             <Pressable 
-              style={tw`bg-red-100 py-2 px-4 rounded-lg flex-row items-center mb-2`}
+              style={({pressed}) => [
+                  tw`flex-1 flex-row justify-center items-center bg-red-50 py-2.5 rounded-lg ml-2 border border-red-100`,
+                  pressed && tw`bg-red-100`
+              ]}
               onPress={handleCancelTournament} 
             >
-              <Ionicons name="close-circle-outline" size={18} color={tw.color('red-700')} />
-              <Text style={tw`text-red-700 font-semibold ml-2`}>Cancel</Text>
+              <Ionicons name="trash-outline" size={18} color={tw.color('red-700')} />
+              <Text style={tw`text-red-700 font-bold text-sm ml-2`}>Cancel</Text>
             </Pressable>
-          )}
+           ) : (
+             <View style={tw`flex-1 flex-row justify-center items-center bg-gray-100 py-2.5 rounded-lg ml-2 opacity-50`}>
+                <Ionicons name="lock-closed-outline" size={16} color="gray" />
+                <Text style={tw`text-gray-500 text-xs ml-2`}>Active Teams</Text>
+             </View>
+           )}
         </View>
       )}
 
-      {tournament.status === 'registration_open' ? (
-        <RegisteredTeamList
-          tournament={tournament}
-          teams={teams} 
-          onGenerateSchedule={handleGenerateSchedule}
-        />
-      ) : (
-        <MatchScheduleList
-          tournament={tournament} 
-          matches={matches} 
-          onMatchUpdate={handleMatchUpdate}
-        />
-      )}
-    </SafeAreaView>
+      {/* 📄 CONTENT AREA */}
+      <View style={tw`flex-1`}>
+         {tournament.status === 'registration_open' ? (
+            <RegisteredTeamList
+              tournament={tournament}
+              teams={teams} 
+              onGenerateSchedule={handleGenerateSchedule}
+            />
+         ) : (
+            <MatchScheduleList
+              tournament={tournament} 
+              matches={matches} 
+              onMatchUpdate={handleMatchUpdate}
+            />
+         )}
+      </View>
+    </View>
   );
 }

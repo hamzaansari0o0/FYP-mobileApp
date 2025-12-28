@@ -1,12 +1,19 @@
+import { Ionicons } from '@expo/vector-icons'; // Icon import
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { collection, doc, increment, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, TextInput } from 'react-native';
+import {
+  ActivityIndicator, Alert,
+  KeyboardAvoidingView, Platform,
+  Pressable, ScrollView,
+  StatusBar,
+  Text, TextInput, View
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
 import { useAuth } from '../../../../context/AuthContext';
 import { db } from '../../../../firebase/firebaseConfig';
-import { notifyUser } from '../../../../utils/notifications'; // Import Notification Helper
+import { notifyUser } from '../../../../utils/notifications';
 
 export default function TeamRegistrationScreen() {
   const { tournamentId } = useLocalSearchParams();
@@ -33,7 +40,6 @@ export default function TeamRegistrationScreen() {
     const tournamentRef = doc(db, 'tournaments', tournamentId);
     const newRegistrationRef = doc(collection(db, 'tournamentRegistrations'));
 
-    // Variables to store data for notification outside transaction
     let ownerIdToNotify = null;
     let tournamentNameToNotify = "";
 
@@ -51,7 +57,6 @@ export default function TeamRegistrationScreen() {
           throw new Error("Sorry, this tournament is already full.");
         }
 
-        // Store data for later notification
         ownerIdToNotify = tournament.ownerId;
         tournamentNameToNotify = tournament.tournamentName;
 
@@ -62,7 +67,7 @@ export default function TeamRegistrationScreen() {
           teamName: teamName,
           captainName: captainName,
           captainPhone: captainPhone,
-          playerId: user.uid, // Note: We use 'playerId' here
+          playerId: user.uid,
           status: "paid",
           registeredAt: serverTimestamp(),
         });
@@ -73,7 +78,7 @@ export default function TeamRegistrationScreen() {
         });
       });
 
-      // --- 🔥 NOTIFY OWNER: New Team Registered ---
+      // --- Notify Owner ---
       if (ownerIdToNotify) {
           await notifyUser(
               ownerIdToNotify,
@@ -88,6 +93,7 @@ export default function TeamRegistrationScreen() {
         "Registration Successful!",
         "Your team is registered. The owner will contact you."
       );
+      // Wapis details screen par bhejein
       router.replace(`/home/tournamentDetails/${tournamentId}`); 
 
     } catch (error) {
@@ -99,51 +105,112 @@ export default function TeamRegistrationScreen() {
   };
 
   return (
-    <SafeAreaView style={tw`flex-1 bg-gray-100`}>
-      <Stack.Screen options={{ title: "Register Your Team" }} />
-      <ScrollView contentContainerStyle={tw`p-5`}>
-        <Text style={tw`text-lg font-semibold mb-2 text-gray-700`}>Team Name</Text>
-        <TextInput
-          style={tw`border border-gray-300 p-3 rounded-lg text-base bg-white mb-4`}
-          placeholder="e.g., The Avengers"
-          value={teamName}
-          onChangeText={setTeamName}
-        />
-        
-        <Text style={tw`text-lg font-semibold mb-2 text-gray-700`}>Captain's Name</Text>
-        <TextInput
-          style={tw`border border-gray-300 p-3 rounded-lg text-base bg-white mb-4`}
-          placeholder="Your name"
-          value={captainName}
-          onChangeText={setCaptainName}
-        />
-        
-        <Text style={tw`text-lg font-semibold mb-2 text-gray-700`}>Captain's Phone</Text>
-        <TextInput
-          style={tw`border border-gray-300 p-3 rounded-lg text-base bg-white mb-6`}
-          placeholder="Your phone number"
-          value={captainPhone}
-          onChangeText={setCaptainPhone}
-          keyboardType="phone-pad"
-        />
+    <SafeAreaView style={tw`flex-1 bg-green-800`}>
+      {/* Default Header Hide */}
+      <Stack.Screen options={{ headerShown: false }} />
+      <StatusBar barStyle="light-content" backgroundColor="#166534" />
 
-        <Pressable
-          style={tw.style(
-            `bg-green-600 py-4 rounded-lg shadow-md`,
-            isRegistering && `bg-green-400`
-          )}
-          onPress={handleRegister}
-          disabled={isRegistering}
+      {/* --- Custom Header --- */}
+      <View style={tw`px-5 py-4 bg-green-800 flex-row items-center`}>
+        <Pressable 
+            onPress={() => router.back()} 
+            style={tw`p-2 bg-white/20 rounded-full mr-3`}
         >
-          {isRegistering ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={tw`text-white text-center text-lg font-bold`}>
-              Register & Pay (Simulated)
-            </Text>
-          )}
+          <Ionicons name="arrow-back" size={24} color="white" />
         </Pressable>
-      </ScrollView>
+        <Text style={tw`text-xl font-bold text-white flex-1`}>
+          Register Your Team
+        </Text>
+      </View>
+
+      {/* --- Body (White Card Style) --- */}
+      <View style={tw`flex-1 bg-gray-50 rounded-t-3xl overflow-hidden`}>
+        <KeyboardAvoidingView 
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={tw`flex-1`}
+        >
+          <ScrollView contentContainerStyle={tw`p-6`}>
+            
+            {/* Icon Header in Body */}
+            <View style={tw`items-center mb-6`}>
+                <View style={tw`bg-green-100 p-4 rounded-full mb-3`}>
+                    <Ionicons name="shield-checkmark-outline" size={40} color="#15803d" />
+                </View>
+                <Text style={tw`text-gray-500 text-center text-sm px-4`}>
+                    Enter your team details below to join the tournament.
+                </Text>
+            </View>
+
+            {/* Input 1: Team Name */}
+            <View style={tw`mb-5`}>
+                <Text style={tw`text-sm font-bold text-gray-700 mb-2 ml-1`}>Team Name</Text>
+                <View style={tw`flex-row items-center border border-gray-300 bg-white rounded-xl px-3 py-3`}>
+                    <Ionicons name="people-outline" size={20} color="gray" style={tw`mr-3`} />
+                    <TextInput
+                        style={tw`flex-1 text-base text-gray-800`}
+                        placeholder="e.g. The Avengers"
+                        value={teamName}
+                        onChangeText={setTeamName}
+                        placeholderTextColor="#9ca3af"
+                    />
+                </View>
+            </View>
+
+            {/* Input 2: Captain Name */}
+            <View style={tw`mb-5`}>
+                <Text style={tw`text-sm font-bold text-gray-700 mb-2 ml-1`}>Captain's Name</Text>
+                <View style={tw`flex-row items-center border border-gray-300 bg-white rounded-xl px-3 py-3`}>
+                    <Ionicons name="person-outline" size={20} color="gray" style={tw`mr-3`} />
+                    <TextInput
+                        style={tw`flex-1 text-base text-gray-800`}
+                        placeholder="Your Name"
+                        value={captainName}
+                        onChangeText={setCaptainName}
+                        placeholderTextColor="#9ca3af"
+                    />
+                </View>
+            </View>
+
+            {/* Input 3: Captain Phone */}
+            <View style={tw`mb-8`}>
+                <Text style={tw`text-sm font-bold text-gray-700 mb-2 ml-1`}>Captain's Phone</Text>
+                <View style={tw`flex-row items-center border border-gray-300 bg-white rounded-xl px-3 py-3`}>
+                    <Ionicons name="call-outline" size={20} color="gray" style={tw`mr-3`} />
+                    <TextInput
+                        style={tw`flex-1 text-base text-gray-800`}
+                        placeholder="0300-1234567"
+                        value={captainPhone}
+                        onChangeText={setCaptainPhone}
+                        keyboardType="phone-pad"
+                        placeholderTextColor="#9ca3af"
+                    />
+                </View>
+            </View>
+
+            {/* Submit Button */}
+            <Pressable
+              style={tw.style(
+                `bg-green-700 py-4 rounded-xl shadow-md flex-row justify-center items-center`,
+                isRegistering && `bg-green-500`
+              )}
+              onPress={handleRegister}
+              disabled={isRegistering}
+            >
+              {isRegistering ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                    <Text style={tw`text-white text-center text-lg font-bold mr-2`}>
+                    Confirm Registration
+                    </Text>
+                    <Ionicons name="arrow-forward-circle-outline" size={24} color="white" />
+                </>
+              )}
+            </Pressable>
+
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </View>
     </SafeAreaView>
   );
 }

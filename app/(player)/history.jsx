@@ -1,5 +1,5 @@
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
+import { Stack, useFocusEffect, useRouter } from "expo-router"; // Stack add kiya
 import {
   collection,
   doc,
@@ -48,8 +48,6 @@ const openMapsForDirections = (lat, lng, label) => {
 const BookingCard = ({ booking, onCancel, isCancelling }) => {
   const [loadingMap, setLoadingMap] = useState(false); 
 
-  // --- 🔥 UPDATE 1: Handling Multi-Slot Time Display ---
-  // Agar 'timeDisplayRange' (Multi) hai to wo dikhaye, warna purana single time
   const displayTime = booking.timeDisplayRange 
     ? booking.timeDisplayRange 
     : (booking.slotTime ? moment(booking.slotTime, "HH:mm").format("h:00 A") : "Time N/A");
@@ -60,12 +58,10 @@ const BookingCard = ({ booking, onCancel, isCancelling }) => {
     ? moment(booking.date).format("ddd, DD MMM YYYY") 
     : moment(booking.slotDateTime.toDate()).format("ddd, DD MMM YYYY");
 
-  // --- 🔥 UPDATE 2: Cancellation Time Logic for Multi-Slots ---
   let bookingTimestamp;
   if (booking.slotDateTime?.toDate) {
       bookingTimestamp = booking.slotDateTime.toDate();
   } else {
-      // New Logic: Agar bookedHours array hai, to uska pehla ghanta uthao
       const firstHour = booking.bookedHours ? booking.bookedHours[0] : booking.slotTime;
       bookingTimestamp = moment(`${booking.date}T${firstHour}:00`, "YYYY-MM-DDTHH:mm").toDate();
   }
@@ -79,7 +75,6 @@ const BookingCard = ({ booking, onCancel, isCancelling }) => {
     ? `...${booking.playerRefundAccount.slice(-4)}`
     : "Wallet";
 
-  // --- INTELLIGENT DIRECTION HANDLER ---
   const handleDirectionPress = async () => {
     setLoadingMap(true);
     try {
@@ -180,7 +175,6 @@ const BookingCard = ({ booking, onCancel, isCancelling }) => {
                     <Text style={tw`text-gray-700 text-sm font-medium`}>
                         {displayTime}
                     </Text>
-                    {/* Show Slot Count Logic */}
                     {slotCount > 1 && (
                         <Text style={tw`text-blue-600 text-xs font-bold mt-0.5`}>
                             ({slotCount} Slots Booked)
@@ -257,10 +251,8 @@ export default function HistoryScreen() {
     }, [user])
   );
 
-  // --- 🔥 UPDATE 3: Sorting Logic (Nearest First) ---
   const fetchMyBookings = async () => {
     try {
-      // 1. Get ALL user bookings (No orderBy inside query to avoid Type errors)
       const q = query(
         collection(db, "bookings"),
         where("playerId", "==", user.uid)
@@ -272,37 +264,24 @@ export default function HistoryScreen() {
       const bookingsList = querySnapshot.docs
         .map((docSnap) => {
             const data = docSnap.data();
-            
-            // Generate a 'sortTime' object for consistent sorting
             let sortTime;
             if (data.date && data.bookedHours && data.bookedHours.length > 0) {
-                // New Format: Use the FIRST booked hour
                 sortTime = moment(`${data.date}T${data.bookedHours[0]}:00`, "YYYY-MM-DDTHH:mm");
             } else if (data.slotDateTime) {
-                // Old Format: Use Timestamp
                 sortTime = moment(data.slotDateTime.toDate());
             } else {
-                 // Error Case: Push to end
                  sortTime = moment().add(10, 'years');
             }
 
             return { id: docSnap.id, ...data, sortTime };
         })
         .filter((booking) => {
-          // Filter out OLD completed bookings if you only want Upcoming
-          // Or keep them but ensure cancelled/expired logic is correct
-          // Logic: Show if Upcoming OR (Completed but not too old?)
-          // For now, let's keep your original filter logic:
-          
-          if (booking.status === "completed_and_paid") return false; // Hide old completed
-          
-          // Check expiry
+          if (booking.status === "completed_and_paid") return false; 
           if (booking.sortTime.isBefore(now) && booking.status !== 'upcoming') {
-              return false; // Hide past bookings
+              return false;
           }
           return true;
         })
-        // Sort: Sabse chota time (Nearest Future) sabse pehle
         .sort((a, b) => a.sortTime.valueOf() - b.sortTime.valueOf());
 
       setBookings(bookingsList);
@@ -340,10 +319,7 @@ export default function HistoryScreen() {
       ]
     );
   };
-  
 
-
-  // --- 🔥 UPDATE 4: Cancellation Logic for Multi-Slots ---
   const performCancellation = async (booking) => {
     setCancellingId(booking.id);
     const bookingRef = doc(db, "bookings", booking.id);
@@ -356,27 +332,19 @@ export default function HistoryScreen() {
         
         if (slotDoc.exists()) {
           const slotsMap = slotDoc.data().slots || {};
-          
-          // Determine which slots to free (New Array vs Old Single String)
           const slotsToFree = booking.bookedHours || [booking.slotTime];
-
-          // Loop through ALL booked hours and free them
           slotsToFree.forEach((hour) => {
               if (slotsMap[hour]) {
                   slotsMap[hour] = "available";
               }
           });
-
-          // Update the slots document
           transaction.update(slotRef, { slots: slotsMap });
         }
-        
-        // Update booking status
         transaction.update(bookingRef, { status: "cancelled_by_player" });
       });
 
       Alert.alert("Success", "Booking Cancelled. Refund initiated.");
-      fetchMyBookings(); // Refresh list immediately
+      fetchMyBookings();
     } catch (error) {
       console.error("Cancellation Failed:", error);
       Alert.alert("Error", "Network error. Could not cancel.");
@@ -386,51 +354,60 @@ export default function HistoryScreen() {
   };
 
   return (
-    <SafeAreaView style={tw`flex-1 bg-gray-50`}>
-       <StatusBar barStyle="dark-content" backgroundColor="#f9fafb" />
+    // ✅ BACKGROUND UPDATE: SafeAreaView Green taake Top Notch Green ho
+    <SafeAreaView style={tw`flex-1 bg-green-900`}>
+        {/* ✅ DUPLICATE HEADER REMOVED: Default header hide kar diya */}
+        <Stack.Screen options={{ headerShown: false }} />
+        
+        {/* ✅ STATUS BAR: White text, Green BG */}
+        <StatusBar barStyle="light-content" backgroundColor="#14532d" />
        
-      <View style={tw`px-5 py-4 bg-white border-b border-gray-200 mb-2`}>
-        <Text style={tw`text-2xl font-bold text-gray-900`}>My Bookings</Text>
-        <Text style={tw`text-gray-500 text-xs`}>Your upcoming games schedule</Text>
+       {/* ✅ CUSTOM HEADER: Matches Theme */}
+      <View style={tw`px-5 py-4 bg-green-900 pb-6`}>
+        <Text style={tw`text-2xl font-bold text-white`}>My Bookings</Text>
+        <Text style={tw`text-green-100 text-xs mt-1`}>Your upcoming games schedule</Text>
       </View>
 
-      {loading ? (
-        <ActivityIndicator size="large" color={tw.color("green-600")} style={tw`mt-20`} />
-      ) : (
-        <FlatList
-          data={bookings}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={tw`p-5 pb-20`}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[tw.color("green-600")]} />
-          }
-          renderItem={({ item }) => (
-            <BookingCard
-              booking={item}
-              onCancel={handleCancelBooking}
-              isCancelling={cancellingId === item.id}
+      {/* ✅ BODY: Wapis Light Gray Background */}
+      <View style={tw`flex-1 bg-gray-50 rounded-t-3xl overflow-hidden`}>
+          {loading ? (
+            <ActivityIndicator size="large" color={tw.color("green-600")} style={tw`mt-20`} />
+          ) : (
+            <FlatList
+              data={bookings}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={tw`p-5 pb-32`} // Extra padding for floating tabs
+              refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[tw.color("green-600")]} />
+              }
+              renderItem={({ item }) => (
+                <BookingCard
+                  booking={item}
+                  onCancel={handleCancelBooking}
+                  isCancelling={cancellingId === item.id}
+                />
+              )}
+              ListEmptyComponent={
+                <View style={tw`items-center justify-center mt-20 px-10`}>
+                  <View style={tw`bg-gray-100 p-6 rounded-full mb-4`}>
+                    <Ionicons name="calendar-outline" size={50} color={tw.color("gray-400")} />
+                  </View>
+                  <Text style={tw`text-lg font-bold text-gray-800`}>No Upcoming Bookings</Text>
+                  <Text style={tw`text-center text-gray-500 mt-2 mb-6 leading-5`}>
+                    Your scheduled games will appear here with full details.
+                  </Text>
+                  
+                  <Pressable 
+                    onPress={() => router.push("/(player)/home")}
+                    style={tw`bg-green-700 px-6 py-3 rounded-full shadow-lg shadow-green-200`}
+                  >
+                    <Text style={tw`text-white font-bold`}>Book a Court Now</Text>
+                  </Pressable>
+                </View>
+              }
             />
           )}
-          ListEmptyComponent={
-            <View style={tw`items-center justify-center mt-20 px-10`}>
-              <View style={tw`bg-gray-100 p-6 rounded-full mb-4`}>
-                <Ionicons name="calendar-outline" size={50} color={tw.color("gray-400")} />
-              </View>
-              <Text style={tw`text-lg font-bold text-gray-800`}>No Upcoming Bookings</Text>
-              <Text style={tw`text-center text-gray-500 mt-2 mb-6 leading-5`}>
-                Your scheduled games will appear here with full details.
-              </Text>
-              
-              <Pressable 
-                onPress={() => router.push("/(player)/home")}
-                style={tw`bg-green-700 px-6 py-3 rounded-full shadow-lg shadow-green-200`}
-              >
-                <Text style={tw`text-white font-bold`}>Book a Court Now</Text>
-              </Pressable>
-            </View>
-          }
-        />
-      )}
+      </View>
     </SafeAreaView>
   );
 }

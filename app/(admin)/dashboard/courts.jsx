@@ -1,57 +1,68 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, FlatList, Pressable, Alert, ActivityIndicator } from 'react-native';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { collection, doc, getDocs, updateDoc } from 'firebase/firestore';
+import React, { useCallback, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, Pressable, StatusBar, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
 import { db } from '../../../firebase/firebaseConfig';
-import { collection, getDocs, doc, updateDoc } from 'firebase/firestore'; // deleteDoc hata diya
-import { useFocusEffect, useRouter } from 'expo-router'; 
-import { Ionicons } from '@expo/vector-icons'; 
 
-// --- Reusable Admin Header (ye waisa hi hai) ---
+// --- Header Component ---
 const AdminHeader = ({ title, onBack }) => (
-  <View style={tw`flex-row items-center mb-5`}>
-    <Pressable onPress={onBack} style={tw`p-2`}>
-      <Ionicons name="arrow-back-outline" size={28} color={tw.color('purple-800')} />
+  <View style={tw`flex-row items-center mb-6 pt-2`}>
+    <Pressable onPress={onBack} style={tw`bg-gray-50 p-2 rounded-xl mr-3 border border-gray-200`}>
+      <Ionicons name="arrow-back" size={20} color="#374151" />
     </Pressable>
-    <Text style={tw`text-3xl font-bold text-purple-800 ml-3`}>{title}</Text>
+    <View style={tw`flex-1 flex-row items-center`}>
+        <View style={tw`bg-purple-600 p-2 rounded-lg mr-2`}>
+            <MaterialIcons name="sports-tennis" size={18} color="white" />
+        </View>
+        <Text style={tw`text-xl font-bold text-gray-900`}>{title}</Text>
+    </View>
   </View>
 );
 
-// --- Court Card Component (UPDATE HUA HAI) ---
-const CourtCard = ({ court, onDisable, onEnable }) => { // 'onDelete' prop hata diya
+// --- Court Card Component ---
+const CourtCard = ({ court, onDisable, onEnable }) => { 
   const isEnabled = court.status !== 'disabled';
   
-  const getStatusStyle = (status) => {
+  const getStatusColor = (status) => {
     switch (status) {
-      case 'approved': return `bg-green-100 text-green-800`;
-      case 'pending': return `bg-yellow-100 text-yellow-800`;
-      case 'disabled': return `bg-gray-100 text-gray-800`;
-      case 'rejected': return `bg-red-100 text-red-800`;
-      default: return `bg-gray-100 text-gray-800`;
+      case 'approved': return 'bg-green-50 text-green-700';
+      case 'pending': return 'bg-amber-50 text-amber-700';
+      case 'disabled': return 'bg-red-50 text-red-700';
+      case 'rejected': return 'bg-red-50 text-red-700';
+      default: return 'bg-gray-50 text-gray-500';
     }
   };
 
   return (
-    <View style={tw`bg-white p-4 rounded-lg shadow-md mb-4`}>
+    <View style={tw`bg-white p-4 rounded-2xl shadow-sm border border-purple-50 mb-3`}>
       <View style={tw`flex-row justify-between items-start`}>
-        <View>
-          <Text style={tw`text-xl font-bold text-gray-800`}>{court.courtName}</Text>
-          <Text style={tw`text-base text-gray-600 mt-1`}>{court.address}</Text>
+        <View style={tw`flex-1 mr-2`}>
+          <Text style={tw`text-base font-bold text-gray-900`}>{court.courtName}</Text>
+          <Text style={tw`text-[11px] text-gray-400 mt-0.5`} numberOfLines={1}>{court.address}</Text>
         </View>
-        <Text style={tw`text-xs font-bold px-2 py-1 rounded-full ${getStatusStyle(court.status)}`}>
-          {court.status.toUpperCase()}
-        </Text>
+        
+        <View style={tw`px-2 py-1 rounded-md ${getStatusColor(court.status).split(' ')[0]}`}>
+           <Text style={tw`text-[10px] font-bold uppercase ${getStatusColor(court.status).split(' ')[1]}`}>
+             {court.status || 'UNKNOWN'}
+           </Text>
+        </View>
       </View>
       
-      <View style={tw`flex-row justify-end mt-4 pt-3 border-t border-gray-200`}>
-        {/* --- DELETE BUTTON YAHAN SE HATA DIYA GAYA HAI --- */}
-        
-        {/* --- Disable/Enable Button --- */}
+      <View style={tw`flex-row justify-end mt-3 pt-3 border-t border-gray-100`}>
         <Pressable
-          style={tw`py-2 px-5 rounded-lg ${isEnabled ? 'bg-yellow-500' : 'bg-green-500'}`}
+          style={({ pressed }) => tw.style(
+            `px-3 py-1.5 rounded-lg border flex-row items-center`,
+            isEnabled ? `bg-red-50 border-red-100` : `bg-green-50 border-green-100`,
+            pressed && `opacity-70`
+          )}
           onPress={() => isEnabled ? onDisable(court.id) : onEnable(court.id)}
         >
-          <Text style={tw`text-white font-bold`}>{isEnabled ? 'Disable' : 'Enable'}</Text>
+          <Text style={tw`text-[10px] font-bold ${isEnabled ? 'text-red-700' : 'text-green-700'}`}>
+             {isEnabled ? 'Disable' : 'Enable'}
+          </Text>
         </Pressable>
       </View>
     </View>
@@ -69,7 +80,7 @@ export default function ManageCourtsScreen() {
     }, [])
   );
 
-  const fetchCourts = async () => { /* ... (waisa hi) ... */ 
+  const fetchCourts = async () => {
     setLoading(true);
     try {
       const querySnapshot = await getDocs(collection(db, 'courts'));
@@ -82,7 +93,8 @@ export default function ManageCourtsScreen() {
       setLoading(false);
     }
   };
-  const handleDisable = async (courtId) => { /* ... (waisa hi) ... */ 
+
+  const handleDisable = async (courtId) => {
     try {
       await updateDoc(doc(db, 'courts', courtId), { status: 'disabled' });
       Alert.alert('Success', 'Court has been disabled.');
@@ -91,7 +103,8 @@ export default function ManageCourtsScreen() {
       Alert.alert('Error', 'Failed to disable court.');
     }
   };
-  const handleEnable = async (courtId) => { /* ... (waisa hi) ... */ 
+
+  const handleEnable = async (courtId) => {
     try {
       await updateDoc(doc(db, 'courts', courtId), { status: 'pending' });
       Alert.alert('Success', 'Court status set to Pending. Please approve it from the Approvals tab.');
@@ -100,16 +113,15 @@ export default function ManageCourtsScreen() {
       Alert.alert('Error', 'Failed to enable court.');
     }
   };
-  
-  // --- "handleDelete" FUNCTION YAHAN SE MUKAMMAL HATA DIYA GAYA HAI ---
 
   return (
-    <SafeAreaView style={tw`flex-1 bg-gray-100`}>
-      <View style={tw`p-5`}>
+    <SafeAreaView style={tw`flex-1 bg-white`}>
+      <StatusBar barStyle="dark-content" />
+      <View style={tw`flex-1 px-5`}>
         <AdminHeader title="Manage Courts" onBack={() => router.back()} />
         
         {loading ? (
-          <ActivityIndicator size="large" color={tw.color('purple-600')} />
+          <ActivityIndicator size="small" color="#9333ea" style={tw`mt-10`} />
         ) : (
           <FlatList
             data={courts}
@@ -119,10 +131,10 @@ export default function ManageCourtsScreen() {
                 court={item} 
                 onDisable={handleDisable} 
                 onEnable={handleEnable} 
-                // 'onDelete' prop yahan se hata diya
               />
             )}
-            ListEmptyComponent={<Text>No courts found.</Text>}
+            contentContainerStyle={tw`pb-10`}
+            ListEmptyComponent={<Text style={tw`text-center text-gray-400 mt-10 text-sm`}>No courts found.</Text>}
           />
         )}
       </View>

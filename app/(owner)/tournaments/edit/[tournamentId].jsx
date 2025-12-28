@@ -1,12 +1,28 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Text } from 'react-native';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  where
+} from 'firebase/firestore';
+import React, { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  StatusBar,
+  Text,
+  View
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
+
 import TournamentRegistrationForm from '../../../../components/specific/TournamentRegistrationForm';
 import { db } from '../../../../firebase/firebaseConfig';
-import { notifyAllPlayers, notifyUser } from '../../../../utils/notifications'; // Added notifyAllPlayers
+import { notifyAllPlayers, notifyUser } from '../../../../utils/notifications';
 
 export default function EditTournamentScreen() {
   const router = useRouter();
@@ -15,6 +31,7 @@ export default function EditTournamentScreen() {
   const [loading, setLoading] = useState(true);
   const [initialData, setInitialData] = useState(null);
 
+  // --- FETCH DATA ---
   useEffect(() => {
     if (!tournamentId) return;
     
@@ -40,7 +57,7 @@ export default function EditTournamentScreen() {
     fetchTournament();
   }, [tournamentId]);
 
-  // Edit karne ke baad notification bhejein
+  // --- HANDLE SUCCESS & NOTIFICATIONS ---
   const handleSuccess = async (newId, updatedData) => {
     const tourName = updatedData?.tournamentName || initialData?.tournamentName || "Tournament";
     console.log(`📝 Tournament Updated: ${tourName} (ID: ${tournamentId})`);
@@ -104,28 +121,58 @@ export default function EditTournamentScreen() {
 
   if (loading) {
     return (
-        <SafeAreaView style={tw`flex-1 justify-center items-center bg-gray-100`}>
-            <ActivityIndicator size="large" color={tw.color('blue-600')} />
-        </SafeAreaView>
+        <View style={tw`flex-1 justify-center items-center bg-gray-50`}>
+            <Stack.Screen options={{ headerShown: false }} />
+            <ActivityIndicator size="large" color={tw.color('green-700')} />
+        </View>
     );
   }
 
   if (!initialData) {
     return (
-        <SafeAreaView style={tw`flex-1 justify-center items-center bg-gray-100`}>
+        <View style={tw`flex-1 justify-center items-center bg-gray-50`}>
+            <Stack.Screen options={{ headerShown: false }} />
             <Text style={tw`text-gray-500`}>No data found.</Text>
-        </SafeAreaView>
+        </View>
     );
   }
 
   return (
-    <SafeAreaView style={tw`flex-1 bg-gray-100`}>
-      <Stack.Screen options={{ title: "Edit: " + initialData.tournamentName }} />
-      <TournamentRegistrationForm 
-        isEditMode={true}
-        initialData={initialData}
-        onSuccess={handleSuccess} 
-      />
-    </SafeAreaView>
+    <View style={tw`flex-1 bg-gray-50`}>
+      {/* 🛑 Hide Default Header */}
+      <Stack.Screen options={{ headerShown: false }} />
+      
+      <StatusBar barStyle="light-content" backgroundColor="#14532d" />
+
+      {/* 🟢 CUSTOM GREEN HEADER */}
+      <View style={{ backgroundColor: '#14532d' }}>
+        <SafeAreaView edges={['top', 'left', 'right']} style={tw`px-4 pb-4 pt-2`}>
+          <View style={tw`flex-row items-center`}>
+            {/* Back Button */}
+            <Pressable 
+              onPress={() => router.back()}
+              style={tw`mr-4 p-1 rounded-full`}
+            >
+              <Ionicons name="arrow-back" size={24} color="white" />
+            </Pressable>
+
+            {/* Title */}
+            <View>
+                <Text style={tw`text-xl font-bold text-white`}>Edit Tournament</Text>
+                <Text style={tw`text-xs text-green-200`}>{initialData.tournamentName}</Text>
+            </View>
+          </View>
+        </SafeAreaView>
+      </View>
+
+      {/* 📝 FORM CONTAINER */}
+      <View style={tw`flex-1`}>
+        <TournamentRegistrationForm 
+          isEditMode={true}
+          initialData={initialData}
+          onSuccess={handleSuccess} 
+        />
+      </View>
+    </View>
   );
 }

@@ -1,20 +1,24 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  View, Text, ScrollView, ActivityIndicator, Alert, 
-  Pressable, SectionList // 1. SectionList import karein
+import { Ionicons } from '@expo/vector-icons';
+import { Link, Stack, useLocalSearchParams, useRouter } from 'expo-router'; // Stack import kiya
+import {
+  collection,
+  doc, getDoc,
+  getDocs, orderBy,
+  query, where
+} from 'firebase/firestore';
+import moment from 'moment';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator, Alert,
+  Pressable, SectionList, StatusBar,
+  Text,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, Stack, Link } from 'expo-router';
 import tw from 'twrnc';
 import { db } from '../../../../firebase/firebaseConfig';
-import { 
-  doc, getDoc, collection, query, where, 
-  getDocs, orderBy // 2. Naye imports (matches fetch karne ke liye)
-} from 'firebase/firestore';
-import { Ionicons } from '@expo/vector-icons';
-import moment from 'moment';
 
-// === Countdown Timer Component (Waisa hi) ===
+// === 1. Countdown Timer Component ===
 const CountdownTimer = ({ deadline }) => {
   const calculateTimeLeft = () => {
     const difference = deadline.getTime() - new Date().getTime();
@@ -40,116 +44,127 @@ const CountdownTimer = ({ deadline }) => {
   const isExpired = timeLeft.days === 0 && timeLeft.hours === 0 && timeLeft.minutes === 0 && timeLeft.seconds === 0;
 
   return (
-    <View style={tw`bg-red-100 border border-red-300 p-4 rounded-lg mb-5`}>
-      <Text style={tw`text-base font-bold text-red-700 text-center mb-2`}>
-        {isExpired ? "Registration Closed" : "Registration Closes In:"}
+    <View style={tw`bg-green-50 border border-green-200 p-4 rounded-xl mb-6 shadow-sm`}>
+      <Text style={tw`text-sm font-bold text-green-800 text-center mb-2 uppercase tracking-wide`}>
+        {isExpired ? "Registration Closed" : "Registration Ends In"}
       </Text>
-      <View style={tw`flex-row justify-center`}>
-        <View style={tw`items-center mx-2`}>
-          <Text style={tw`text-3xl font-bold text-red-800`}>{formatTime(timeLeft.days)}</Text>
-          <Text style={tw`text-xs text-red-600`}>DAYS</Text>
-        </View>
-        <Text style={tw`text-3xl font-bold text-red-800`}>:</Text>
-        <View style={tw`items-center mx-2`}>
-          <Text style={tw`text-3xl font-bold text-red-800`}>{formatTime(timeLeft.hours)}</Text>
-          <Text style={tw`text-xs text-red-600`}>HOURS</Text>
-        </View>
-        <Text style={tw`text-3xl font-bold text-red-800`}>:</Text>
-        <View style={tw`items-center mx-2`}>
-          <Text style={tw`text-3xl font-bold text-red-800`}>{formatTime(timeLeft.minutes)}</Text>
-          <Text style={tw`text-xs text-red-600`}>MINUTES</Text>
-        </View>
-        <Text style={tw`text-3xl font-bold text-red-800`}>:</Text>
-        <View style={tw`items-center mx-2`}>
-          <Text style={tw`text-3xl font-bold text-red-800`}>{formatTime(timeLeft.seconds)}</Text>
-          <Text style={tw`text-xs text-red-600`}>SECONDS</Text>
-        </View>
+      <View style={tw`flex-row justify-center items-center`}>
+        <TimeBlock value={formatTime(timeLeft.days)} label="DAYS" />
+        <Text style={tw`text-2xl font-bold text-green-700 pb-4`}>:</Text>
+        <TimeBlock value={formatTime(timeLeft.hours)} label="HRS" />
+        <Text style={tw`text-2xl font-bold text-green-700 pb-4`}>:</Text>
+        <TimeBlock value={formatTime(timeLeft.minutes)} label="MIN" />
+        <Text style={tw`text-2xl font-bold text-green-700 pb-4`}>:</Text>
+        <TimeBlock value={formatTime(timeLeft.seconds)} label="SEC" />
       </View>
     </View>
   );
 };
 
-// === DetailRow Component (Waisa hi) ===
+const TimeBlock = ({ value, label }) => (
+  <View style={tw`items-center mx-2`}>
+    <Text style={tw`text-2xl font-bold text-green-900`}>{value}</Text>
+    <Text style={tw`text-[10px] text-green-700 font-bold`}>{label}</Text>
+  </View>
+);
+
+// === 2. DetailRow Component ===
 const DetailRow = ({ icon, label, value }) => (
-  <View style={tw`flex-row items-start mb-3`}>
-    <Ionicons name={icon} size={20} color={tw.color('blue-600')} style={tw`mt-1`} />
-    <View style={tw`ml-3`}>
-      <Text style={tw`text-sm font-bold text-gray-500`}>{label}</Text>
-      <Text style={tw`text-base text-gray-800 capitalize`}>{value}</Text>
+  <View style={tw`flex-row items-center mb-3 bg-white p-3 rounded-lg shadow-sm border border-gray-100`}>
+    <View style={tw`bg-green-100 p-2 rounded-full`}>
+        <Ionicons name={icon} size={18} color="#15803d" />
+    </View>
+    <View style={tw`ml-3 flex-1`}>
+      <Text style={tw`text-xs font-bold text-gray-400 uppercase`}>{label}</Text>
+      <Text style={tw`text-sm font-semibold text-gray-800 capitalize`}>{value}</Text>
     </View>
   </View>
 );
 
-// === 3. NAYA "Winner Banner" Component ===
+// === 3. Winner Banner ===
 const WinnerBanner = ({ winnerName }) => (
-  <View style={tw`bg-yellow-300 border border-yellow-500 p-4 rounded-lg mb-5 items-center`}>
-    <Ionicons name="trophy" size={40} color={tw.color('yellow-800')} />
-    <Text style={tw`text-xl font-bold text-yellow-900 mt-2`}>Tournament Winner</Text>
-    <Text style={tw`text-2xl font-bold text-yellow-900`}>{winnerName}</Text>
+  <View style={tw`bg-yellow-50 border border-yellow-200 p-5 rounded-xl mb-6 items-center shadow-sm`}>
+    <Ionicons name="trophy" size={40} color="#ca8a04" />
+    <Text style={tw`text-lg font-bold text-yellow-800 mt-2`}>Tournament Winner</Text>
+    <Text style={tw`text-2xl font-extrabold text-yellow-900 mt-1`}>{winnerName}</Text>
   </View>
 );
 
-// === 4. NAYA "Registration Closed" Banner Component ===
+// === 4. Registration Closed Banner ===
 const RegistrationClosedBanner = ({ startDate }) => (
-  <View style={tw`bg-red-100 border border-red-300 p-4 rounded-lg mb-5 items-center`}>
-    <Ionicons name="close-circle-outline" size={30} color={tw.color('red-700')} />
-    <Text style={tw`text-lg font-bold text-red-800 mt-2`}>Registrations are Closed</Text>
-    <Text style={tw`text-base text-gray-700`}>
-      Tournament starts on: {moment(startDate).format('D MMM, YYYY')}
-    </Text>
+  <View style={tw`bg-red-50 border border-red-200 p-4 rounded-xl mb-6 flex-row items-center`}>
+    <Ionicons name="alert-circle" size={32} color="#b91c1c" />
+    <View style={tw`ml-3 flex-1`}>
+        <Text style={tw`text-base font-bold text-red-800`}>Registrations Closed</Text>
+        <Text style={tw`text-xs text-red-600 mt-1`}>
+            Tournament starts on: {moment(startDate).format('MMM D, YYYY • h:mm A')}
+        </Text>
+    </View>
   </View>
 );
 
-// === 5. NAYA "Player Match Card" Component ===
-// (Owner ke MatchCard se thoda alag, kyunki ismein 'Update' button nahi hai)
+// === 5. Player Match Card ===
 const PlayerMatchCard = ({ match }) => {
   const isCompleted = match.status === 'completed';
   const winnerId = match.winner?.id;
-  // Haarne wali team ko gray karein
+  
   const teamAStyle = isCompleted && winnerId !== match.teamA?.id ? 'text-gray-400' : 'text-gray-800';
   const teamBStyle = isCompleted && winnerId !== match.teamB?.id ? 'text-gray-400' : 'text-gray-800';
 
   return (
-    <View style={tw`bg-white p-3 rounded-lg shadow-sm mb-3 border border-gray-200`}>
-      <Text style={tw`text-xs text-gray-500`}>Round {match.round} - Match {match.matchNumber}</Text>
-      <View style={tw`flex-row items-center justify-between mt-1`}>
-        {/* Team A */}
-        <Text style={tw`text-base font-bold w-[40%] ${teamAStyle}`}>{match.teamA?.name || 'Waiting...'}</Text>
-        {/* Score / vs */}
-        {isCompleted ? (
-          <Text style={tw`text-lg font-bold text-blue-600`}>{match.scoreA} - {match.scoreB}</Text>
-        ) : (
-          <Text style={tw`text-sm text-gray-500`}>vs</Text>
-        )}
-        {/* Team B */}
-        <Text style={tw`text-base font-bold w-[40%] text-right ${teamBStyle}`}>{match.teamB?.name || 'Waiting...'}</Text>
+    <View style={tw`bg-white p-4 rounded-xl shadow-sm mb-3 border border-gray-100 mx-1`}>
+      <View style={tw`flex-row justify-between mb-2`}>
+        <Text style={tw`text-xs font-bold text-green-700 bg-green-50 px-2 py-0.5 rounded`}>Match {match.matchNumber}</Text>
+        {isCompleted && <Text style={tw`text-xs font-bold text-gray-400`}>Finished</Text>}
       </View>
-      {/* Winner dikhayein */}
+      
+      <View style={tw`flex-row items-center justify-between`}>
+        <Text style={tw`text-sm font-bold w-[35%] ${teamAStyle}`} numberOfLines={1}>
+            {match.teamA?.name || 'TBD'}
+        </Text>
+        
+        <View style={tw`bg-gray-100 px-3 py-1 rounded-full`}>
+            {isCompleted ? (
+            <Text style={tw`text-sm font-bold text-gray-800`}>{match.scoreA} - {match.scoreB}</Text>
+            ) : (
+            <Text style={tw`text-xs font-bold text-gray-500`}>VS</Text>
+            )}
+        </View>
+
+        <Text style={tw`text-sm font-bold w-[35%] text-right ${teamBStyle}`} numberOfLines={1}>
+            {match.teamB?.name || 'TBD'}
+        </Text>
+      </View>
+
       {isCompleted && match.winner && (
-         <Text style={tw`text-center text-green-600 font-semibold mt-1`}>
-           Winner: {match.winner.name}
-         </Text>
+         <View style={tw`mt-3 pt-2 border-t border-gray-100 flex-row items-center justify-center`}>
+            <Ionicons name="trophy" size={14} color="#15803d" />
+            <Text style={tw`text-xs font-bold text-green-700 ml-1`}>
+               Winner: {match.winner.name}
+            </Text>
+         </View>
       )}
     </View>
   );
 };
 
 
-// === 6. MAIN COMPONENT (Updated Data Fetching ke saath) ===
+// === MAIN COMPONENT ===
 export default function TournamentDetailsScreen() {
-  const { tournamentId } = useLocalSearchParams();
+  const { tournamentId } = useLocalSearchParams(); 
+  const router = useRouter();
+  
   const [tournament, setTournament] = useState(null);
-  const [matches, setMatches] = useState([]); // Matches ke liye nayi state
+  const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // --- Fetch Data ---
   useEffect(() => {
     if (!tournamentId) return;
     
-    // Dono (tournament aur matches) ko fetch karein
     const fetchAllData = async () => {
       setLoading(true);
       try {
-        // 1. Tournament Details fetch karein
         const docRef = doc(db, 'tournaments', tournamentId);
         const docSnap = await getDoc(docRef);
         
@@ -157,7 +172,6 @@ export default function TournamentDetailsScreen() {
           const tourData = { id: docSnap.id, ...docSnap.data() };
           setTournament(tourData);
 
-          // 2. Agar tournament 'live' ya 'completed' hai, to matches fetch karein
           if (tourData.status === 'live' || tourData.status === 'completed') {
             const matchesQuery = query(
               collection(db, 'tournamentMatches'),
@@ -171,18 +185,19 @@ export default function TournamentDetailsScreen() {
           }
         } else {
           Alert.alert("Error", "Tournament not found.");
+          router.back();
         }
       } catch (error) {
-        console.error("Error fetching tournament: ", error);
+        console.error("Error fetching data: ", error);
         Alert.alert("Error", "Could not load details.");
       } finally {
         setLoading(false);
       }
     };
     fetchAllData();
-  }, [tournamentId]); // Jab ID badle to dobara fetch karein
+  }, [tournamentId]);
 
-  // Matches ko Round ke hisab se group karein (SectionList ke liye)
+  // --- Group Matches by Round ---
   const groupedMatches = useMemo(() => {
     const groups = {};
     matches.forEach(match => {
@@ -196,85 +211,138 @@ export default function TournamentDetailsScreen() {
   }, [matches]);
 
   if (loading) {
-    return <ActivityIndicator size="large" style={tw`mt-20`} />;
-  }
-  if (!tournament) {
-    return <Text style={tw`text-center text-red-500 mt-10`}>Tournament details not available.</Text>;
+    return (
+        <View style={tw`flex-1 bg-green-800 justify-center items-center`}>
+            <Stack.Screen options={{ headerShown: false }} /> 
+            <ActivityIndicator size="large" color="white" />
+        </View>
+    );
   }
 
-  // Registration button ke liye logic
+  if (!tournament) return null;
+
   const isRegistrationOpen = 
     tournament.status === 'registration_open' && 
-    tournament.registrationDeadline.toDate() > new Date();
+    tournament.registrationDeadline?.toDate() > new Date();
 
   return (
-    <SafeAreaView style={tw`flex-1 bg-white`}>
-      <Stack.Screen options={{ title: tournament.tournamentName }} />
+    <SafeAreaView style={tw`flex-1 bg-green-800`}>
+      {/* HEADER HIDE KARNE WALI LINE */}
+      <Stack.Screen options={{ headerShown: false }} /> 
+
+      <StatusBar barStyle="light-content" backgroundColor="#166534" />
       
-      {/* === 7. NAYA UI: SectionList (Matches aur Details ko ek saath handle karne ke liye) === */}
-      <SectionList
-        sections={groupedMatches} // Match data
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={tw`p-5`}
-        
-        // Match ka card
-        renderItem={({ item }) => <PlayerMatchCard match={item} />} 
-        
-        // Round ka header (e.g., "Round 1")
-        renderSectionHeader={({ section: { title } }) => (
-          <Text style={tw`text-xl font-bold text-gray-800 mb-2 mt-4`}>{title}</Text>
-        )}
+      {/* --- Custom Header --- */}
+      <View style={tw`px-5 py-4 bg-green-800 flex-row items-center`}>
+        <Pressable 
+            onPress={() => router.back()} 
+            style={tw`p-2 bg-white/20 rounded-full mr-3`}
+        >
+          <Ionicons name="arrow-back" size={24} color="white" />
+        </Pressable>
+        <Text style={tw`text-xl font-bold text-white flex-1`} numberOfLines={1}>
+          Tournament Details
+        </Text>
+      </View>
 
-        // --- Saari Details ab Header mein ---
-        ListHeaderComponent={
-          <>
-            <Text style={tw`text-3xl font-bold text-gray-800`}>{tournament.tournamentName}</Text>
-            <Text style={tw`text-lg text-gray-600 mb-5`}>Hosted by {tournament.arenaName}</Text>
-            
-            {/* --- NAYA CONDITIONAL BANNER --- */}
-            {tournament.status === 'completed' ? (
-              <WinnerBanner winnerName={tournament.tournamentWinner?.name || 'N/A'} />
-            ) : isRegistrationOpen ? (
-              <CountdownTimer deadline={tournament.registrationDeadline.toDate()} />
-            ) : (
-              <RegistrationClosedBanner startDate={tournament.startDate.toDate()} />
-            )}
-            {/* --- BANNER KHATAM --- */}
+      {/* --- Body --- */}
+      <View style={tw`flex-1 bg-gray-50 rounded-t-3xl overflow-hidden`}>
+        <SectionList
+          sections={groupedMatches}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={tw`p-5 pb-32`}
+          stickySectionHeadersEnabled={false}
+          showsVerticalScrollIndicator={false}
 
-            <View style={tw`bg-gray-100 p-4 rounded-lg`}>
-              <DetailRow icon="game-controller-outline" label="Game Type" value={`${tournament.gameType} ${tournament.teamSize}`} />
-              <DetailRow icon="trophy-outline" label="Format" value={tournament.format} />
-              <DetailRow icon="cash-outline" label="Entry Fee" value={`Rs. ${tournament.entryFee}`} />
-              <DetailRow icon="gift-outline" label="Prize Money" value={`Rs. ${tournament.prizeMoney}`} />
-              <DetailRow icon="people-outline" label="Teams" value={`${tournament.registeredTeamCount} / ${tournament.teamLimit || 'Unlimited'}`} />
-            </View>
-
-            <Text style={tw`text-xl font-bold text-gray-800 mt-6 mb-2`}>Rules</Text>
-            <Text style={tw`text-base text-gray-700 mb-4`}>{tournament.rules || 'No specific rules provided.'}</Text>
-            
-            {/* Match schedule ka title (agar matches hain) */}
-            {matches.length > 0 && (
-              <Text style={tw`text-2xl font-bold text-gray-800 mt-4`}>Match Schedule</Text>
-            )}
-          </>
-        }
-      />
-
-      {/* --- NAYA STICKY BOTTOM LOGIC --- */}
-      {/* Yeh view ab sirf tab dikhega jab registration open ho */}
-      {isRegistrationOpen && (
-        <View style={tw`p-4 border-t border-gray-200 bg-white`}>
-          <Link href={`/home/teamRegistration/${tournament.id}`} asChild>
-            <Pressable style={tw`bg-green-600 py-3 rounded-lg shadow-md`}>
-              <Text style={tw`text-white text-center text-lg font-bold`}>
-                Register Your Team (Rs. {tournament.entryFee})
+          // --- HEADER: All Tournament Info ---
+          ListHeaderComponent={
+            <>
+              <Text style={tw`text-2xl font-bold text-gray-900 mb-1`}>
+                {tournament.tournamentName}
               </Text>
-            </Pressable>
-          </Link>
-        </View>
-      )}
-      {/* Agar registration band hai ya tournament complete hai, to button nahi dikhega */}
+              <View style={tw`flex-row items-center mb-6`}>
+                <Ionicons name="location-outline" size={16} color="gray" />
+                <Text style={tw`text-gray-500 ml-1`}>Hosted by {tournament.arenaName}</Text>
+              </View>
 
+              {/* Status Banners */}
+              {tournament.status === 'completed' ? (
+                <WinnerBanner winnerName={tournament.tournamentWinner?.name || 'Unknown'} />
+              ) : isRegistrationOpen ? (
+                <CountdownTimer deadline={tournament.registrationDeadline.toDate()} />
+              ) : (
+                <RegistrationClosedBanner startDate={tournament.startDate.toDate()} />
+              )}
+
+              {/* Info Grid */}
+              <View style={tw`mb-6`}>
+                <Text style={tw`text-lg font-bold text-gray-800 mb-3`}>Overview</Text>
+                <View style={tw`flex-row flex-wrap justify-between`}>
+                    <View style={tw`w-[48%]`}>
+                        <DetailRow icon="game-controller" label="Game" value={tournament.gameType} />
+                        <DetailRow icon="people" label="Format" value={tournament.teamSize} />
+                        <DetailRow icon="trophy" label="Prize" value={`₹${tournament.prizeMoney}`} />
+                    </View>
+                    <View style={tw`w-[48%]`}>
+                        <DetailRow icon="calendar" label="Date" value={moment(tournament.startDate.toDate()).format('D MMM')} />
+                        <DetailRow icon="layers" label="Type" value={tournament.format} />
+                        <DetailRow icon="cash" label="Entry" value={`₹${tournament.entryFee}`} />
+                    </View>
+                </View>
+              </View>
+
+              {/* Rules Section */}
+              <View style={tw`bg-white p-4 rounded-xl border border-gray-200 mb-6`}>
+                 <Text style={tw`text-lg font-bold text-gray-800 mb-2`}>Rules & Info</Text>
+                 <Text style={tw`text-gray-600 leading-5 text-sm`}>
+                    {tournament.rules || 'No specific rules provided by the host.'}
+                 </Text>
+              </View>
+
+              {/* Matches Header (If Matches Exist) */}
+              {matches.length > 0 && (
+                 <View style={tw`flex-row items-center mb-2 mt-2`}>
+                    <Ionicons name="git-network-outline" size={24} color="#15803d" style={tw`mr-2`} />
+                    <Text style={tw`text-xl font-bold text-gray-800`}>Bracket / Matches</Text>
+                 </View>
+              )}
+            </>
+          }
+
+          // --- SECTION HEADER: Round Titles ---
+          renderSectionHeader={({ section: { title } }) => (
+            <View style={tw`bg-gray-200 py-1 px-3 rounded-lg self-start mt-4 mb-2`}>
+                <Text style={tw`text-sm font-bold text-gray-700`}>{title}</Text>
+            </View>
+          )}
+
+          // --- ITEM: Match Card ---
+          renderItem={({ item }) => <PlayerMatchCard match={item} />}
+
+          // --- EMPTY STATE ---
+          ListEmptyComponent={
+             (!loading && (tournament.status === 'live' || tournament.status === 'completed') && matches.length === 0) ? (
+                <View style={tw`items-center py-10`}>
+                    <Text style={tw`text-gray-400`}>Matches are being scheduled...</Text>
+                </View>
+             ) : null
+          }
+        />
+
+        {/* --- STICKY BOTTOM BUTTON (Register) --- */}
+        {isRegistrationOpen && (
+            <View style={tw`absolute bottom-0 left-0 right-0 p-5 bg-white border-t border-gray-100 shadow-lg`}>
+                <Link href={`/home/teamRegistration/${tournamentId}`} asChild>
+                <Pressable style={tw`bg-green-800 py-4 rounded-xl shadow-md flex-row justify-center items-center`}>
+                    <Ionicons name="person-add" size={20} color="white" style={tw`mr-2`} />
+                    <Text style={tw`text-white text-center text-lg font-bold`}>
+                        Register Team • ₹{tournament.entryFee}
+                    </Text>
+                </Pressable>
+                </Link>
+            </View>
+        )}
+      </View>
     </SafeAreaView>
   );
 }

@@ -12,19 +12,23 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
+  StatusBar,
   Text,
   TextInput,
+  TouchableWithoutFeedback,
   View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import tw from "twrnc";
+// Imports adjusted based on your folder structure
 import { useAuth } from "../../../context/AuthContext";
 import { db } from "../../../firebase/firebaseConfig";
-import { notifyUser } from "../../../utils/notifications"; // Notification helper import kiya
+import { notifyUser } from "../../../utils/notifications";
 
 export default function ContactUsScreen() {
   const router = useRouter();
@@ -55,7 +59,6 @@ export default function ContactUsScreen() {
     setLoading(true);
 
     try {
-      // 1. Save Ticket to Database
       const ticketData = {
         userId: user?.uid || "guest",
         name: name.trim(),
@@ -69,35 +72,27 @@ export default function ContactUsScreen() {
 
       await addDoc(collection(db, "support_tickets"), ticketData);
 
-      // 2. Notify Admin (NEW LOGIC)
-      // Hum database se check karenge ke 'role' == 'admin' kiska hai
       const q = query(collection(db, "users"), where("role", "==", "admin"));
       const adminSnapshot = await getDocs(q);
 
       if (!adminSnapshot.empty) {
-        // Har admin ko notification bhejein (agar 1 se zyada admin hon)
         adminSnapshot.forEach(async (doc) => {
           const adminId = doc.id;
           await notifyUser(
             adminId,
-            "New Support Ticket 📩", // Title
-            `${name} reported an issue: ${subject}`, // Body
-            "support", // Type
-            { url: '/(admin)/support' } // Admin click kare to seedha support page par jaye
+            "New Support Ticket 📩",
+            `${name} reported an issue: ${subject}`,
+            "support",
+            { url: '/(admin)/support' }
           );
         });
-        console.log("Admin notified successfully.");
       }
 
-      // 3. Success Alert
       Alert.alert(
         "Request Sent",
         "We have received your message. Our team will contact you shortly.",
         [
-          {
-            text: "OK",
-            onPress: () => router.back(),
-          },
+          { text: "OK", onPress: () => router.back() },
         ]
       );
     } catch (error) {
@@ -109,106 +104,130 @@ export default function ContactUsScreen() {
   };
 
   return (
-    <SafeAreaView style={tw`flex-1 bg-white`}>
+    // SafeAreaView Dark Green for Header continuity
+    <SafeAreaView style={tw`flex-1 bg-green-800`}>
       <Stack.Screen options={{ headerShown: false }} />
-      
-      {/* Header */}
-      <View style={tw`flex-row items-center px-4 py-3 border-b border-gray-100`}>
-        <Pressable onPress={() => router.back()} style={tw`p-2 bg-gray-50 rounded-full mr-3`}>
-          <Ionicons name="arrow-back" size={24} color="black" />
+      <StatusBar barStyle="light-content" backgroundColor="#166534" /> 
+
+      {/* --- Dark Green Header --- */}
+      <View style={tw`flex-row items-center px-4 py-4 bg-green-800 shadow-sm`}>
+        <Pressable
+          onPress={() => router.back()}
+          style={tw`p-2 bg-white/20 rounded-full mr-3`} // Semi-transparent white circle
+        >
+          <Ionicons name="arrow-back" size={24} color="white" />
         </Pressable>
-        <Text style={tw`text-xl font-bold text-gray-900`}>Contact Support</Text>
+        <Text style={tw`text-xl font-bold text-white`}>Contact Support</Text>
       </View>
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={tw`flex-1`}
-      >
-        <ScrollView contentContainerStyle={tw`p-6 pb-10`} showsVerticalScrollIndicator={false}>
-          
-          <Text style={tw`text-gray-500 text-base mb-6`}>
-            Facing an issue with a booking or app? Fill out the form below and we will help you out.
-          </Text>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        {/* Main Body Background White */}
+        <View style={tw`flex-1 bg-white`}>
+            <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={tw`flex-1`}
+            >
+            <ScrollView 
+                contentContainerStyle={tw`p-6 pb-40`} // ✅ Extra Bottom Padding
+                showsVerticalScrollIndicator={false}
+            >
+                
+                {/* Info Box */}
+                <View style={tw`bg-green-50 p-4 rounded-xl border border-green-100 mb-6 flex-row items-start`}>
+                <Ionicons name="headset" size={24} color="#15803d" style={tw`mt-1`} />
+                <Text style={tw`text-green-800 text-sm ml-3 flex-1 leading-5`}>
+                    Facing an issue with a booking or app? Fill out the form below and we will help you out.
+                </Text>
+                </View>
 
-          <View style={tw`gap-4`}>
-            {/* Name */}
-            <View>
-              <Text style={tw`text-sm font-bold text-gray-700 mb-1 ml-1`}>Your Name</Text>
-              <View style={tw`flex-row items-center bg-gray-50 border border-gray-200 rounded-xl px-4 py-3`}>
-                <Ionicons name="person-outline" size={20} color="gray" />
-                <TextInput
-                  style={tw`flex-1 ml-3 text-base text-gray-800`}
-                  placeholder="John Doe"
-                  value={name}
-                  onChangeText={setName}
-                />
-              </View>
-            </View>
+                <View style={tw`gap-5`}>
+                {/* Name */}
+                <View>
+                    <Text style={tw`text-sm font-bold text-gray-700 mb-2 ml-1`}>Your Name</Text>
+                    <View style={tw`flex-row items-center bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm`}>
+                    <Ionicons name="person" size={20} color="#15803d" />
+                    <TextInput
+                        style={tw`flex-1 ml-3 text-base text-gray-900`}
+                        placeholder="John Doe"
+                        placeholderTextColor="#9ca3af"
+                        value={name}
+                        onChangeText={setName}
+                    />
+                    </View>
+                </View>
 
-            {/* Email */}
-            <View>
-              <Text style={tw`text-sm font-bold text-gray-700 mb-1 ml-1`}>Email Address</Text>
-              <View style={tw`flex-row items-center bg-gray-50 border border-gray-200 rounded-xl px-4 py-3`}>
-                <Ionicons name="mail-outline" size={20} color="gray" />
-                <TextInput
-                  style={tw`flex-1 ml-3 text-base text-gray-800`}
-                  placeholder="name@example.com"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  value={email}
-                  onChangeText={setEmail}
-                />
-              </View>
-            </View>
+                {/* Email */}
+                <View>
+                    <Text style={tw`text-sm font-bold text-gray-700 mb-2 ml-1`}>Email Address</Text>
+                    <View style={tw`flex-row items-center bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm`}>
+                    <Ionicons name="mail" size={20} color="#15803d" />
+                    <TextInput
+                        style={tw`flex-1 ml-3 text-base text-gray-900`}
+                        placeholder="name@example.com"
+                        placeholderTextColor="#9ca3af"
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                        value={email}
+                        onChangeText={setEmail}
+                    />
+                    </View>
+                </View>
 
-            {/* Subject */}
-            <View>
-              <Text style={tw`text-sm font-bold text-gray-700 mb-1 ml-1`}>Subject</Text>
-              <View style={tw`flex-row items-center bg-gray-50 border border-gray-200 rounded-xl px-4 py-3`}>
-                <Ionicons name="pricetag-outline" size={20} color="gray" />
-                <TextInput
-                  style={tw`flex-1 ml-3 text-base text-gray-800`}
-                  placeholder="e.g. Booking Issue, Payment Error"
-                  value={subject}
-                  onChangeText={setSubject}
-                />
-              </View>
-            </View>
+                {/* Subject */}
+                <View>
+                    <Text style={tw`text-sm font-bold text-gray-700 mb-2 ml-1`}>Subject</Text>
+                    <View style={tw`flex-row items-center bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm`}>
+                    <Ionicons name="pricetag" size={20} color="#15803d" />
+                    <TextInput
+                        style={tw`flex-1 ml-3 text-base text-gray-900`}
+                        placeholder="e.g. Booking Issue, Payment Error"
+                        placeholderTextColor="#9ca3af"
+                        value={subject}
+                        onChangeText={setSubject}
+                    />
+                    </View>
+                </View>
 
-            {/* Message */}
-            <View>
-              <Text style={tw`text-sm font-bold text-gray-700 mb-1 ml-1`}>Message</Text>
-              <View style={tw`bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 h-32`}>
-                <TextInput
-                  style={tw`flex-1 text-base text-gray-800 text-justify`}
-                  placeholder="Describe your issue here..."
-                  multiline
-                  textAlignVertical="top"
-                  value={message}
-                  onChangeText={setMessage}
-                />
-              </View>
-            </View>
-          </View>
+                {/* Message */}
+                <View>
+                    <Text style={tw`text-sm font-bold text-gray-700 mb-2 ml-1`}>Message</Text>
+                    <View style={tw`bg-white border border-gray-200 rounded-xl px-4 py-3 h-36 shadow-sm`}>
+                    <TextInput
+                        style={tw`flex-1 text-base text-gray-900 text-justify`}
+                        placeholder="Describe your issue here..."
+                        placeholderTextColor="#9ca3af"
+                        multiline
+                        textAlignVertical="top"
+                        value={message}
+                        onChangeText={setMessage}
+                    />
+                    </View>
+                </View>
+                </View>
 
-          {/* Submit Button */}
-          <Pressable
-            onPress={handleSubmit}
-            disabled={loading}
-            style={({ pressed }) => [
-              tw`mt-8 py-4 rounded-xl items-center justify-center shadow-sm`,
-              loading || pressed ? tw`bg-green-700` : tw`bg-green-600`
-            ]}
-          >
-            {loading ? (
-              <ActivityIndicator color="white" />
-            ) : (
-              <Text style={tw`text-white font-bold text-lg`}>Submit Ticket</Text>
-            )}
-          </Pressable>
+                {/* Submit Button */}
+                <Pressable
+                onPress={handleSubmit}
+                disabled={loading}
+                style={({ pressed }) => [
+                    tw`mt-12 py-4 rounded-2xl items-center justify-center shadow-lg flex-row`, // Margin Top increased
+                    loading || pressed ? tw`bg-green-900` : tw`bg-green-800`
+                ]}
+                >
+                {loading ? (
+                    <ActivityIndicator color="white" />
+                ) : (
+                    <>
+                    <Ionicons name="paper-plane" size={20} color="white" style={tw`mr-2`} />
+                    <Text style={tw`text-white font-bold text-lg`}>Submit Ticket</Text>
+                    </>
+                )}
+                </Pressable>
 
-        </ScrollView>
-      </KeyboardAvoidingView>
+            </ScrollView>
+            </KeyboardAvoidingView>
+        </View>
+      </TouchableWithoutFeedback>
     </SafeAreaView>
   );
 }

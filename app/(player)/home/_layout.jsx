@@ -18,7 +18,7 @@ export default function HomeStackLayout() {
       <Stack.Screen
         name="[courtId]"
         options={{
-          headerShown: true,
+          headerShown: false,
           title: "Court Details",
         }}
       />
@@ -27,7 +27,7 @@ export default function HomeStackLayout() {
       <Stack.Screen
         name="ownerDetails/[ownerId]"
         options={{
-          headerShown: true,
+          headerShown: false,
           title: "Owner's Courts",
         }}
       />
@@ -46,7 +46,7 @@ export default function HomeStackLayout() {
       <Stack.Screen
         name="tournaments"
         options={{
-          headerShown: true,
+          headerShown: false,
           title: "Tournaments",
         }}
       />
@@ -55,7 +55,7 @@ export default function HomeStackLayout() {
       <Stack.Screen
         name="contactUs"
         options={{
-          headerShown: true,
+          headerShown: false,
           title: "Contact Us",
         }}
       />

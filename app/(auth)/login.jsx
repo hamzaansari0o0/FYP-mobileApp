@@ -1,19 +1,23 @@
 import { Link, useRouter } from 'expo-router';
+import { sendPasswordResetEmail } from "firebase/auth"; // ✅ Import Added
 import { useState } from 'react';
 import {
   ActivityIndicator,
-  ImageBackground, // 1. Import ImageBackground
+  Alert, // ✅ Import Added
+  ImageBackground,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   Text,
   TextInput,
+  TouchableWithoutFeedback,
   View
 } from 'react-native';
 import tw from 'twrnc';
 import { useAuth } from '../../context/AuthContext';
+import { auth } from '../../firebase/firebaseConfig'; // ✅ Import auth directly
 
-// 2. Image Path (Ensure ye path sahi ho)
 const bgImage = require('../../assets/images/loginForm-image.jpg');
 
 export default function Login() {
@@ -24,6 +28,29 @@ export default function Login() {
   
   const { login } = useAuth();
   const router = useRouter(); 
+
+  // --- ✅ FORGOT PASSWORD LOGIC ---
+  const handleForgotPassword = async () => {
+    if (!email) {
+      Alert.alert("Email Required", "Please enter your email address in the box above to reset your password.");
+      return;
+    }
+    
+    try {
+      await sendPasswordResetEmail(auth, email);
+      Alert.alert("Email Sent", "Password reset link has been sent to your email. Check your inbox (and spam folder).");
+    } catch (err) {
+      console.log(err);
+      if (err.code === 'auth/user-not-found') {
+        Alert.alert("Error", "No user found with this email.");
+      } else if (err.code === 'auth/invalid-email') {
+        Alert.alert("Error", "Invalid email address format.");
+      } else {
+        Alert.alert("Error", "Could not send reset email. Try again later.");
+      }
+    }
+  };
+  // -------------------------------
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -54,69 +81,81 @@ export default function Login() {
   };
 
   return (
-    // 3. ImageBackground as main container
     <ImageBackground source={bgImage} style={tw`flex-1`} resizeMode="cover">
-      {/* 4. Dark Overlay for readability */}
-      <View style={tw`flex-1 bg-black/50 justify-center items-center p-6`}>
       
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={tw`w-full`}>
-
-        {/* 5. White Container Box */}
-        <View style={tw`bg-white/95 p-6 rounded-2xl shadow-2xl w-full max-w-sm`}>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         
-            <Text style={tw`text-3xl font-bold text-center mb-6 text-gray-900`}>
-            Welcome Back!
-            </Text>
-
-            <TextInput
-            style={tw`border border-gray-300 p-4 rounded-xl mb-4 text-base bg-gray-50`}
-            placeholder="Email"
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            />
-            <TextInput
-            style={tw`border border-gray-300 p-4 rounded-xl mb-5 text-base bg-gray-50`}
-            placeholder="Password"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            />
-
-            {error && <Text style={tw`text-red-600 text-center mb-4 font-medium`}>{error}</Text>}
-
-            <Pressable
-            style={tw.style(
-                `bg-blue-600 py-4 rounded-xl shadow-md`,
-                loading && `bg-blue-400`
-            )}
-            onPress={handleLogin}
-            disabled={loading}
-            >
-            {loading ? (
-                <ActivityIndicator color={tw.color('white')} />
-            ) : (
-                <Text style={tw`text-white text-center text-lg font-bold`}>
-                Login
+        <View style={tw`flex-1 bg-black/50`}>
+          
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === "ios" ? "padding" : "height"} 
+            style={tw`flex-1 justify-center items-center p-6`}
+          >
+            
+            <View style={tw`bg-white/95 p-6 rounded-2xl shadow-2xl w-full max-w-sm`}>
+            
+                <Text style={tw`text-3xl font-bold text-center mb-6 text-gray-900`}>
+                  Welcome Back!
                 </Text>
-            )}
-            </Pressable>
 
-            <Link href="/(auth)/signup" asChild>
-            <Pressable style={tw`mt-6`}>
-                <Text style={tw`text-blue-700 text-center text-base font-semibold`}>
-                Don't have an account? Sign Up
-                </Text>
-            </Pressable>
-            </Link>
-        
+                <TextInput
+                  style={tw`border border-gray-300 p-4 rounded-xl mb-4 text-base bg-gray-50 text-gray-800`}
+                  placeholder="Email"
+                  placeholderTextColor="#9ca3af"
+                  value={email}
+                  onChangeText={setEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                />
+                
+                <TextInput
+                  style={tw`border border-gray-300 p-4 rounded-xl mb-2 text-base bg-gray-50 text-gray-800`}
+                  placeholder="Password"
+                  placeholderTextColor="#9ca3af"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                />
+
+                {/* ✅ Forgot Password Link */}
+                <Pressable onPress={handleForgotPassword} style={tw`self-end mb-4 p-1`}>
+                    <Text style={tw`text-blue-600 font-semibold text-sm`}>Forgot Password?</Text>
+                </Pressable>
+
+                {error ? (
+                  <Text style={tw`text-red-600 text-center mb-4 font-medium`}>{error}</Text>
+                ) : null}
+
+                <Pressable
+                  style={tw.style(
+                    `bg-blue-600 py-4 rounded-xl shadow-md`,
+                    loading && `bg-blue-400`
+                  )}
+                  onPress={handleLogin}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <ActivityIndicator color={tw.color('white')} />
+                  ) : (
+                    <Text style={tw`text-white text-center text-lg font-bold`}>
+                      Login
+                    </Text>
+                  )}
+                </Pressable>
+
+                <Link href="/(auth)/signup" asChild>
+                  <Pressable style={tw`mt-6`}>
+                    <Text style={tw`text-blue-700 text-center text-base font-semibold`}>
+                      Don't have an account? Sign Up
+                    </Text>
+                  </Pressable>
+                </Link>
+            
+            </View>
+            
+          </KeyboardAvoidingView>
         </View>
-        {/* End White Container */}
-        
-      </KeyboardAvoidingView>
-      </View>
-      {/* End Overlay */}
+      </TouchableWithoutFeedback>
     </ImageBackground>
   );
 }
