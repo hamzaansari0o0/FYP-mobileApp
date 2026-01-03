@@ -6,7 +6,7 @@ import tw from "twrnc";
 export default function CourtCard({ court }) {
   const courtImage = court.courtImageURL
     ? { uri: court.courtImageURL }
-    : require("../assets/images/hero-image.png"); 
+    : require("../assets/images/hero-image.webp"); 
 
   return (
     <Link href={`/home/${court.id}`} asChild>
