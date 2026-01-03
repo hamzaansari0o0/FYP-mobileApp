@@ -1,7 +1,7 @@
-import { Ionicons } from '@expo/vector-icons'; // Icon import
+import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { collection, doc, increment, runTransaction, serverTimestamp } from 'firebase/firestore';
-import { useState } from 'react';
+import { collection, doc, getDoc, increment, runTransaction, serverTimestamp } from 'firebase/firestore'; // getDoc added
+import { useEffect, useState } from 'react'; // useEffect added
 import {
   ActivityIndicator, Alert,
   KeyboardAvoidingView, Platform,
@@ -23,7 +23,24 @@ export default function TeamRegistrationScreen() {
   const [teamName, setTeamName] = useState("");
   const [captainName, setCaptainName] = useState(userData?.name || ""); 
   const [captainPhone, setCaptainPhone] = useState(userData?.mobileNumber || ""); 
+  const [entryFee, setEntryFee] = useState(0); // State for Fee
   const [isRegistering, setIsRegistering] = useState(false);
+
+  // --- 1. Tournament Data (Fee) Fetch Karein ---
+  useEffect(() => {
+    const fetchTournamentDetails = async () => {
+        try {
+            const docRef = doc(db, 'tournaments', tournamentId);
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+                setEntryFee(docSnap.data().entryFee || 0);
+            }
+        } catch (error) {
+            console.log("Error fetching fee:", error);
+        }
+    };
+    fetchTournamentDetails();
+  }, [tournamentId]);
 
   const handleRegister = async () => {
     if (!teamName || !captainName || !captainPhone) {
@@ -52,7 +69,6 @@ export default function TeamRegistrationScreen() {
 
         const tournament = tournamentDoc.data();
 
-        // Check Limit
         if (tournament.teamLimit && tournament.registeredTeamCount >= tournament.teamLimit) {
           throw new Error("Sorry, this tournament is already full.");
         }
@@ -60,7 +76,6 @@ export default function TeamRegistrationScreen() {
         ownerIdToNotify = tournament.ownerId;
         tournamentNameToNotify = tournament.tournamentName;
 
-        // Create Registration
         transaction.set(newRegistrationRef, {
           tournamentId: tournamentId,
           ownerId: tournament.ownerId,
@@ -68,17 +83,16 @@ export default function TeamRegistrationScreen() {
           captainName: captainName,
           captainPhone: captainPhone,
           playerId: user.uid,
-          status: "paid",
+          status: "paid", // Status Paid set ho raha hai
+          amountPaid: entryFee, // Amount bhi save kar rahe hain
           registeredAt: serverTimestamp(),
         });
 
-        // Update Count
         transaction.update(tournamentRef, {
           registeredTeamCount: increment(1)
         });
       });
 
-      // --- Notify Owner ---
       if (ownerIdToNotify) {
           await notifyUser(
               ownerIdToNotify,
@@ -89,11 +103,11 @@ export default function TeamRegistrationScreen() {
           );
       }
 
+      // --- 2. Success Message Update ---
       Alert.alert(
-        "Registration Successful!",
-        "Your team is registered. The owner will contact you."
+        "Payment Successful! 🎉", 
+        `Entry fee of ₹${entryFee} received. Your team is officially registered.`
       );
-      // Wapis details screen par bhejein
       router.replace(`/home/tournamentDetails/${tournamentId}`); 
 
     } catch (error) {
@@ -106,42 +120,39 @@ export default function TeamRegistrationScreen() {
 
   return (
     <SafeAreaView style={tw`flex-1 bg-green-800`}>
-      {/* Default Header Hide */}
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar barStyle="light-content" backgroundColor="#166534" />
 
-      {/* --- Custom Header --- */}
+      {/* --- Header --- */}
       <View style={tw`px-5 py-4 bg-green-800 flex-row items-center`}>
-        <Pressable 
-            onPress={() => router.back()} 
-            style={tw`p-2 bg-white/20 rounded-full mr-3`}
-        >
+        <Pressable onPress={() => router.back()} style={tw`p-2 bg-white/20 rounded-full mr-3`}>
           <Ionicons name="arrow-back" size={24} color="white" />
         </Pressable>
-        <Text style={tw`text-xl font-bold text-white flex-1`}>
-          Register Your Team
-        </Text>
+        <Text style={tw`text-xl font-bold text-white flex-1`}>Register Your Team</Text>
       </View>
 
-      {/* --- Body (White Card Style) --- */}
+      {/* --- Body --- */}
       <View style={tw`flex-1 bg-gray-50 rounded-t-3xl overflow-hidden`}>
         <KeyboardAvoidingView 
             behavior={Platform.OS === "ios" ? "padding" : "height"}
             style={tw`flex-1`}
         >
-          <ScrollView contentContainerStyle={tw`p-6`}>
+          <ScrollView 
+            contentContainerStyle={tw`p-6 pb-40`} 
+            showsVerticalScrollIndicator={false}
+          >
             
-            {/* Icon Header in Body */}
+            {/* Intro Text */}
             <View style={tw`items-center mb-6`}>
                 <View style={tw`bg-green-100 p-4 rounded-full mb-3`}>
                     <Ionicons name="shield-checkmark-outline" size={40} color="#15803d" />
                 </View>
                 <Text style={tw`text-gray-500 text-center text-sm px-4`}>
-                    Enter your team details below to join the tournament.
+                    Enter details & pay entry fee to join.
                 </Text>
             </View>
 
-            {/* Input 1: Team Name */}
+            {/* Inputs */}
             <View style={tw`mb-5`}>
                 <Text style={tw`text-sm font-bold text-gray-700 mb-2 ml-1`}>Team Name</Text>
                 <View style={tw`flex-row items-center border border-gray-300 bg-white rounded-xl px-3 py-3`}>
@@ -156,7 +167,6 @@ export default function TeamRegistrationScreen() {
                 </View>
             </View>
 
-            {/* Input 2: Captain Name */}
             <View style={tw`mb-5`}>
                 <Text style={tw`text-sm font-bold text-gray-700 mb-2 ml-1`}>Captain's Name</Text>
                 <View style={tw`flex-row items-center border border-gray-300 bg-white rounded-xl px-3 py-3`}>
@@ -171,8 +181,7 @@ export default function TeamRegistrationScreen() {
                 </View>
             </View>
 
-            {/* Input 3: Captain Phone */}
-            <View style={tw`mb-8`}>
+            <View style={tw`mb-6`}>
                 <Text style={tw`text-sm font-bold text-gray-700 mb-2 ml-1`}>Captain's Phone</Text>
                 <View style={tw`flex-row items-center border border-gray-300 bg-white rounded-xl px-3 py-3`}>
                     <Ionicons name="call-outline" size={20} color="gray" style={tw`mr-3`} />
@@ -187,7 +196,16 @@ export default function TeamRegistrationScreen() {
                 </View>
             </View>
 
-            {/* Submit Button */}
+            {/* --- 3. Payment Summary Box (New) --- */}
+            <View style={tw`bg-green-50 border border-green-200 p-4 rounded-xl mb-6 flex-row justify-between items-center`}>
+                <View>
+                    <Text style={tw`text-green-800 font-bold text-base`}>Entry Fee</Text>
+                    <Text style={tw`text-green-600 text-xs`}>Payable Now</Text>
+                </View>
+                <Text style={tw`text-2xl font-extrabold text-green-700`}>₹{entryFee}</Text>
+            </View>
+
+            {/* Button */}
             <Pressable
               style={tw.style(
                 `bg-green-700 py-4 rounded-xl shadow-md flex-row justify-center items-center`,
@@ -201,9 +219,10 @@ export default function TeamRegistrationScreen() {
               ) : (
                 <>
                     <Text style={tw`text-white text-center text-lg font-bold mr-2`}>
-                    Confirm Registration
+                        {/* Button text changed to reflect payment */}
+                        Pay ₹{entryFee} & Register
                     </Text>
-                    <Ionicons name="arrow-forward-circle-outline" size={24} color="white" />
+                    <Ionicons name="card-outline" size={24} color="white" />
                 </>
               )}
             </Pressable>

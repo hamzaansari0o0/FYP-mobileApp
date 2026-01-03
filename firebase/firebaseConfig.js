@@ -1,16 +1,15 @@
+import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 import { initializeApp } from "firebase/app";
-// --- STEP 1: Sahi Imports ---
-import { 
-  initializeAuth,
-  getReactNativePersistence,  // Yeh Native (Mobile) ke liye hai
-  browserLocalPersistence     // Yeh Web ke liye hai (sahi naam)
+import {
+  browserLocalPersistence,
+  getReactNativePersistence,
+  initializeAuth
 } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage"; // Storage ko import karein
-import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
+import { getFunctions } from "firebase/functions"; // 👈 CHANGE 1: Ye import add karein
+import { getStorage } from "firebase/storage";
 import { Platform } from 'react-native';
 
-// Aap ki keys .env file se aa rahi hain (yeh theek hai)
 const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -22,26 +21,23 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-// --- STEP 2: Sahi Logic ---
-
 let persistence;
-
 if (Platform.OS === 'web') {
-  // Web ke liye, hum direct constant pass karte hain (function call nahi)
   persistence = browserLocalPersistence;
 } else {
-  // Mobile (iOS/Android) ke liye, hum function call karte hain
   persistence = getReactNativePersistence(ReactNativeAsyncStorage);
 }
 
-// Ab 'auth' ko sahi persistence ke sath initialize karein
 const auth = initializeAuth(app, {
   persistence: persistence
 });
 
-// Baqi services (Firestore, Storage)
 const db = getFirestore(app);
-const storage = getStorage(app); // Storage ko initialize karein
+const storage = getStorage(app);
 
-// Sab ko export karein
-export { auth, db, storage };
+// 👇 CHANGE 2: Functions ko initialize karein
+const functions = getFunctions(app, 'us-central1'); 
+// 'us-central1' is liye likha kyunki deploy karte waqt yahi region tha.
+
+// 👇 CHANGE 3: Export mein 'functions' bhi add karein
+export { auth, db, functions, storage };

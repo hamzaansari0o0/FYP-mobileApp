@@ -1,27 +1,27 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import {
-  collection,
-  doc,
-  getDocs,
-  onSnapshot,
-  orderBy,
-  query,
-  runTransaction,
-  updateDoc,
-  where
+    collection,
+    doc,
+    getDocs,
+    onSnapshot,
+    orderBy,
+    query,
+    runTransaction,
+    updateDoc,
+    where
 } from "firebase/firestore";
 import moment from "moment";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Pressable,
-  RefreshControl,
-  StatusBar,
-  Text,
-  View
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    Pressable,
+    RefreshControl,
+    StatusBar,
+    Text,
+    View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import tw from "twrnc";
@@ -175,6 +175,9 @@ export default function OwnerDashboard() {
   const [cancellingId, setCancellingId] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
 
+  // --- 🔥 NEW: Tab State ---
+  const [activeTab, setActiveTab] = useState('present'); // 'past', 'present', 'future'
+
   // 1. Notifications Count
   useEffect(() => {
     if (!user) return;
@@ -192,12 +195,11 @@ export default function OwnerDashboard() {
     if (!user) return;
     setLoading(true);
     try {
-      const todayStr = moment().format("YYYY-MM-DD");
+      // ✅ CHANGED: Removed date filter to allow fetching Past bookings as well
       const q = query(
         collection(db, "bookings"),
         where("ownerId", "==", user.uid),
-        where("date", ">=", todayStr), 
-        orderBy("date", "asc")
+        orderBy("date", "desc") // Fetch all history
       );
       const querySnapshot = await getDocs(q);
       let bookingsList = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
@@ -219,6 +221,8 @@ export default function OwnerDashboard() {
               return b;
           }
           const bookingEndTime = moment(b.date, "YYYY-MM-DD").hour(endHour).minute(0);
+          
+          // 🔥 This triggers the move to "Earnings" (Pending)
           if (now.isAfter(bookingEndTime)) {
               b.status = 'completed_pending_payout';
               updates.push(updateDoc(doc(db, "bookings", b.id), { status: 'completed_pending_payout' }));
@@ -237,6 +241,36 @@ export default function OwnerDashboard() {
 
   useFocusEffect(useCallback(() => { fetchOwnerBookings(); }, [fetchOwnerBookings]));
   const onRefresh = () => { setRefreshing(true); fetchOwnerBookings(); };
+
+  // --- 🔥 NEW: Filtering Logic based on Tabs ---
+  const filteredBookings = useMemo(() => {
+    const today = moment().startOf('day');
+
+    return bookings.filter(booking => {
+        const bookingDate = moment(booking.date, "YYYY-MM-DD");
+
+        if (activeTab === 'past') {
+            return bookingDate.isBefore(today);
+        } else if (activeTab === 'present') {
+            return bookingDate.isSame(today);
+        } else if (activeTab === 'future') {
+            return bookingDate.isAfter(today);
+        }
+        return false;
+    }).sort((a, b) => {
+        // Sort Logic: 
+        // Present/Future: Ascending (Soonest first)
+        // Past: Descending (Most recent past first)
+        const dateA = moment(a.date, "YYYY-MM-DD");
+        const dateB = moment(b.date, "YYYY-MM-DD");
+
+        if (activeTab === 'past') {
+            return dateB.valueOf() - dateA.valueOf();
+        }
+        return dateA.valueOf() - dateB.valueOf();
+    });
+
+  }, [bookings, activeTab]);
 
   // 3. Cancel Logic
   const handleOwnerCancel = (booking) => {
@@ -286,9 +320,30 @@ export default function OwnerDashboard() {
     }
   };
 
+  // --- 🔥 Component for Tab Button ---
+  const TabButton = ({ title, value }) => {
+    const isActive = activeTab === value;
+    return (
+        <Pressable 
+            onPress={() => setActiveTab(value)}
+            style={tw.style(
+                `flex-1 items-center py-3 border-b-2`,
+                isActive ? `border-green-800` : `border-transparent`
+            )}
+        >
+            <Text style={tw.style(
+                `font-bold text-sm uppercase tracking-wide`,
+                isActive ? `text-green-800` : `text-gray-400`
+            )}>
+                {title}
+            </Text>
+        </Pressable>
+    );
+  }
+
   return (
     <View style={tw`flex-1 bg-gray-50`}>
-        {/* 🟢 1. STATUS BAR (Updated to Match Dark Header) */}
+        {/* 🟢 1. STATUS BAR */}
         <StatusBar barStyle="light-content" backgroundColor="#14532d" translucent={false} />
         
         {/* 🟢 2. DARK GREEN HEADER */}
@@ -298,7 +353,6 @@ export default function OwnerDashboard() {
                     
                     {/* Left Side: Icon & Title */}
                     <View style={tw`flex-row items-center gap-3`}>
-                        {/* Icon Box: Semi-transparent green */}
                         <View style={tw`bg-green-800 p-2 rounded-xl`}>
                             <MaterialCommunityIcons name="view-dashboard" size={22} color="white" />
                         </View>
@@ -324,6 +378,13 @@ export default function OwnerDashboard() {
             </SafeAreaView>
         </View>
 
+        {/* --- 🔥 3. TABS SECTION --- */}
+        <View style={tw`flex-row bg-white border-b border-gray-200 px-2`}>
+            <TabButton title="Past" value="past" />
+            <TabButton title="Present" value="present" />
+            <TabButton title="Future" value="future" />
+        </View>
+
         {/* --- CONTENT --- */}
         {loading ? (
             <View style={tw`flex-1 justify-center items-center`}>
@@ -331,7 +392,7 @@ export default function OwnerDashboard() {
             </View>
         ) : (
             <FlatList
-                data={bookings}
+                data={filteredBookings}
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
                     <BookingCard
@@ -346,13 +407,13 @@ export default function OwnerDashboard() {
                     <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[tw.color('green-700')]} />
                 }
                 ListHeaderComponent={
-                    bookings.length > 0 && (
+                    filteredBookings.length > 0 && (
                         <View style={tw`px-5 mb-3 flex-row items-center justify-between`}>
                           <Text style={tw`text-xs font-bold text-gray-500 uppercase tracking-wider`}>
-                            Upcoming Schedule
+                            {activeTab} Schedule
                           </Text>
                           <Text style={tw`text-[10px] text-green-700 font-bold bg-green-100 px-2 py-0.5 rounded-full`}>
-                             {bookings.length} Pending
+                             {filteredBookings.length} Bookings
                           </Text>
                         </View>
                     )
@@ -360,11 +421,17 @@ export default function OwnerDashboard() {
                 ListEmptyComponent={
                     <View style={tw`items-center justify-center mt-20 px-10`}>
                         <View style={tw`bg-white p-6 rounded-full shadow-sm mb-4 border border-gray-100`}>
-                            <MaterialCommunityIcons name="calendar-check" size={48} color={tw.color('green-200')} />
+                            <MaterialCommunityIcons 
+                                name={activeTab === 'past' ? "history" : activeTab === 'future' ? "calendar-arrow-right" : "calendar-today"} 
+                                size={48} 
+                                color={tw.color('green-200')} 
+                            />
                         </View>
-                        <Text style={tw`text-lg font-bold text-gray-800 mb-1`}>No Bookings Yet</Text>
+                        <Text style={tw`text-lg font-bold text-gray-800 mb-1 capitalize`}>No {activeTab} Bookings</Text>
                         <Text style={tw`text-xs text-gray-500 text-center leading-5`}>
-                            Your court schedule is currently empty.
+                            {activeTab === 'past' ? "You don't have any past bookings." : 
+                             activeTab === 'present' ? "No games scheduled for today." : 
+                             "No upcoming bookings found."}
                         </Text>
                     </View>
                 }

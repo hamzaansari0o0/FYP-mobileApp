@@ -1,20 +1,21 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, onSnapshot } from "firebase/firestore"; // 🔥 getDoc hata kar onSnapshot lagaya
 import moment from "moment";
 import React, { useEffect, useState } from "react";
 import {
+  Alert,
   FlatList,
   Modal,
   Pressable,
   Text,
-  View,
+  View
 } from "react-native";
 import { Calendar } from "react-native-calendars";
 import tw from "twrnc";
 import { useAuth } from "../../context/AuthContext";
 import { db } from "../../firebase/firebaseConfig";
 
-// --- Skeleton Component (Slightly smaller) ---
+// --- Skeleton Component ---
 const SkeletonSlot = () => (
   <View style={tw`w-[31%] h-12 bg-gray-200 rounded-lg mb-2 mx-[1%] animate-pulse`} />
 );
@@ -35,55 +36,90 @@ export default function SlotPicker({
   const datesList = Array.from({ length: 14 }, (_, i) => moment().add(i, "days"));
 
   useEffect(() => {
-    fetchSlots(selectedDate);
+    // 🔥 Real-time Listener Function
+    const unsubscribe = subscribeToSlots(selectedDate);
+    // Cleanup function jab component unmount ho ya date change ho
+    return () => {
+        if (unsubscribe) unsubscribe();
+    };
   }, [selectedDate, courtId, refreshKey]);
 
-  const fetchSlots = async (dateMoment) => {
+  // 🔥 New Logic: Subscribe to Real-time Changes
+  const subscribeToSlots = (dateMoment) => {
     setLoadingSlots(true);
-    setSlots([]);
+    // Reset selection jab date change ho
     setSelectedSlotIds([]); 
     onSlotsChange([]); 
 
     const dateStr = dateMoment.format("YYYY-MM-DD");
+    const docId = `${courtId}_${dateStr}`;
+    const slotDocRef = doc(db, "court_slots", docId);
 
-    try {
-      const docId = `${courtId}_${dateStr}`;
-      const slotDocRef = doc(db, "court_slots", docId);
-      const docSnap = await getDoc(slotDocRef);
-      
+    // onSnapshot real-time updates dega
+    const unsubscribe = onSnapshot(slotDocRef, (docSnap) => {
       let existingSlotsMap = {};
       if (docSnap.exists()) {
         existingSlotsMap = docSnap.data().slots || {};
       }
 
       const slotsArray = [];
+      const now = moment();
+
       for (let i = 0; i < 24; i++) {
         const hourKey = i < 10 ? `0${i}` : `${i}`;
-        const timeMoment = moment(dateStr).hour(i).minute(0);
+        const simpleKey = `${i}`;
         
-        const isPast = moment().isAfter(timeMoment) && moment().isSame(timeMoment, 'day');
-        let status = existingSlotsMap[hourKey] || "available";
-        if (isPast) status = "expired";
+        const slotTime = moment(dateStr, "YYYY-MM-DD").hour(i).minute(0);
+        const diffMinutes = slotTime.diff(now, 'minutes');
+
+        // Check status
+        let status = existingSlotsMap[hourKey] || existingSlotsMap[simpleKey] || "available";
+        
+        // 🛑 Logic Update: Check for 'pending_payment'
+        // Agar status 'pending_payment' hai, toh usse 'booked' ki tarah treat karein User B ke liye
+        // Lekin hum display ke liye alag logic rakhenge niche
+        
+        if (diffMinutes < 10) {
+            status = "expired";
+        }
 
         slotsArray.push({
             id: hourKey,
             hour: i,
-            timeDisplay: timeMoment.format("h:00 A"),
+            timeDisplay: slotTime.format("h:00 A"),
             status: status, 
-            fullDate: timeMoment.toDate(),
+            fullDate: slotTime.toDate(),
             dateStr: dateStr 
         });
       }
       setSlots(slotsArray);
-    } catch (error) {
-      console.error("Error fetching slots:", error);
-    } finally {
       setLoadingSlots(false);
-    }
+    }, (error) => {
+        console.error("Error listening to slots:", error);
+        setLoadingSlots(false);
+    });
+
+    return unsubscribe;
   };
 
   const handlePress = (item) => {
+    const now = moment();
+    const slotTime = moment(item.fullDate);
+    const diffMinutes = slotTime.diff(now, 'minutes');
+
+    if (diffMinutes < 10) {
+        Alert.alert("Slot Expired", "This slot is no longer available.");
+        return;
+    }
+
+    // 🔥 Agar slot pending_payment hai (kisi aur ka modal khula hai), toh select mat karne do
+    if (item.status === 'pending_payment') {
+        Alert.alert("Hold on", "Someone is currently booking this slot. Try again in a moment.");
+        return;
+    }
+
     if (item.status !== 'available') return;
+    
     let newSelectedIds;
     if (selectedSlotIds.includes(item.id)) {
         newSelectedIds = selectedSlotIds.filter(id => id !== item.id);
@@ -97,10 +133,18 @@ export default function SlotPicker({
 
   const renderSlot = ({ item }) => {
     const isSelected = selectedSlotIds.includes(item.id);
+    
+    // Status Checks
     const isAvailable = item.status === 'available';
-    const isBooked = item.status !== 'available' && item.status !== 'expired' && item.status !== 'unavailable';
-    const isUnavailable = item.status === 'unavailable';
     const isExpired = item.status === 'expired';
+    const isUnavailable = item.status === 'unavailable';
+    
+    // 🔥 PENDING PAYMENT LOGIC:
+    // Agar 'pending_payment' hai, toh usse 'Booked' jaisa dikhao (Lock icon)
+    const isPending = item.status === 'pending_payment';
+    
+    const isBooked = (!isAvailable && !isExpired && !isUnavailable) || isPending;
+    
     const isNight = item.hour >= 18 || item.hour < 6;
 
     let iconName = isNight ? "weather-night" : "weather-sunny"; 
@@ -116,6 +160,12 @@ export default function SlotPicker({
         subTextStyle = `text-green-100`;
         iconName = "check-circle";
         iconColor = "white";
+    } else if (isPending) {
+        // 🔥 Show Orange/Yellow for Pending Payment (Someone is trying to book)
+        bgStyle = `bg-orange-50 border-orange-200 opacity-80`;
+        textStyle = `text-orange-400 line-through`;
+        iconColor = "#fbbf24"; 
+        iconName = "clock-alert"; // New Icon for pending
     } else if (isBooked) {
         bgStyle = `bg-gray-100 border-gray-200 opacity-60`;
         textStyle = `text-gray-400 line-through`;
@@ -136,25 +186,22 @@ export default function SlotPicker({
     return (
       <Pressable
         onPress={() => handlePress(item)}
-        disabled={!isAvailable}
+        // Disable click if pending or not available
+        disabled={!isAvailable} 
         style={tw.style(
-          `w-[31%] py-2.5 mb-2 rounded-lg border items-center justify-center mx-[1%] shadow-sm`, // Height reduced (py-3 -> py-2.5)
+          `w-[31%] py-2.5 mb-2 rounded-lg border items-center justify-center mx-[1%] shadow-sm`,
           bgStyle
         )}
       >
         <View style={tw`flex-row items-center mb-0.5`}>
-            {/* Icon Size Reduced (18 -> 14) */}
             <MaterialCommunityIcons name={iconName} size={14} color={iconColor} style={tw`mr-1`} />
-            
-            {/* Font Size Reduced (text-sm -> text-xs) */}
             <Text style={tw.style(`font-bold text-xs`, textStyle)}>
                 {item.timeDisplay}
             </Text>
         </View>
 
-        {/* Subtext size reduced drastically for cleaner look */}
         <Text style={tw.style(`text-[9px] capitalize font-bold`, subTextStyle)}>
-           {isSelected ? 'Selected' : isBooked ? 'Booked' : isUnavailable ? 'Closed' : isExpired ? 'Past' : (isNight ? 'Night' : 'Day')}
+           {isSelected ? 'Selected' : isPending ? 'Holding...' : isBooked ? 'Booked' : isUnavailable ? 'Closed' : isExpired ? 'Past' : (isNight ? 'Night' : 'Day')}
         </Text>
       </Pressable>
     );
@@ -163,10 +210,9 @@ export default function SlotPicker({
   return (
     <View style={tw`mt-2`}>
       
-      {/* --- Date Header (Smaller Fonts) --- */}
+      {/* --- Date Header --- */}
       <View style={tw`flex-row justify-between items-end mb-3`}>
         <View>
-            {/* text-lg -> text-base */}
             <Text style={tw`text-gray-900 font-bold text-base`}>Select Date</Text>
             <Text style={tw`text-gray-500 text-[10px]`}>{selectedDate.format("MMMM YYYY")}</Text>
         </View>
@@ -192,14 +238,13 @@ export default function SlotPicker({
                 <Pressable
                 onPress={() => setSelectedDate(item)}
                 style={tw.style(
-                    `items-center justify-center w-14 h-18 rounded-xl mr-2 border`, // Box size reduced slightly
+                    `items-center justify-center w-14 h-18 rounded-xl mr-2 border`,
                     isSelected ? `bg-green-700 border-green-700 shadow-sm` : `bg-white border-gray-200`
                 )}
                 >
                 <Text style={tw.style(`text-[10px] uppercase mb-0.5 font-medium`, isSelected ? `text-green-100` : `text-gray-400`)}>
                     {item.format("ddd")}
                 </Text>
-                {/* Date Number Font Reduced (text-xl -> text-lg) */}
                 <Text style={tw.style(`text-lg font-bold`, isSelected ? `text-white` : `text-gray-800`)}>
                     {item.format("DD")}
                 </Text>
@@ -218,7 +263,7 @@ export default function SlotPicker({
       
       {!user && (
         <Text style={tw`text-red-500 bg-red-50 p-2 rounded-lg mb-3 text-center text-xs font-medium`}>
-             Please log in to book.
+              Please log in to book.
         </Text>
       )}
 

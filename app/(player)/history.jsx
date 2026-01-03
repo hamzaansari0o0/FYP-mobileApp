@@ -1,5 +1,5 @@
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import { Stack, useFocusEffect, useRouter } from "expo-router"; // Stack add kiya
+import { Stack, useFocusEffect, useRouter } from "expo-router";
 import {
   collection,
   doc,
@@ -10,7 +10,7 @@ import {
   where
 } from "firebase/firestore";
 import moment from "moment";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -28,7 +28,7 @@ import tw from "twrnc";
 import { useAuth } from "../../context/AuthContext";
 import { db } from "../../firebase/firebaseConfig";
 
-// --- 🔥 1. MAP OPENING LOGIC (Standard) ---
+// --- 🔥 1. MAP OPENING LOGIC ---
 const openMapsForDirections = (lat, lng, label) => {
     const scheme = Platform.select({ ios: 'maps:0,0?q=', android: 'geo:0,0?q=' });
     const latLng = `${lat},${lng}`;
@@ -44,7 +44,7 @@ const openMapsForDirections = (lat, lng, label) => {
     });
 };
 
-/* 🧾 Booking Card Component (Updated for Multi-Slots) */
+/* 🧾 Booking Card Component (Updated: Small Direction Button) */
 const BookingCard = ({ booking, onCancel, isCancelling }) => {
   const [loadingMap, setLoadingMap] = useState(false); 
 
@@ -69,7 +69,10 @@ const BookingCard = ({ booking, onCancel, isCancelling }) => {
   const hoursRemaining = moment(bookingTimestamp).diff(moment(), "hours");
   const isCancelled = booking.status.startsWith("cancelled");
   const isUpcoming = booking.status === "upcoming";
-  const canCancel = hoursRemaining >= 4 && isUpcoming; 
+  
+  // Past bookings cannot be cancelled
+  const isPast = moment(bookingTimestamp).isBefore(moment());
+  const canCancel = hoursRemaining >= 4 && isUpcoming && !isPast; 
 
   const refundAccountDisplay = booking.playerRefundAccount
     ? `...${booking.playerRefundAccount.slice(-4)}`
@@ -123,10 +126,10 @@ const BookingCard = ({ booking, onCancel, isCancelling }) => {
 
   return (
     <View style={tw`bg-white rounded-xl shadow-sm mb-4 border border-gray-100 overflow-hidden`}>
-      <View style={tw`h-1.5 ${isCancelled ? 'bg-red-500' : 'bg-green-600'}`} />
+      <View style={tw`h-1.5 ${isCancelled ? 'bg-red-500' : (isPast ? 'bg-gray-400' : 'bg-green-600')}`} />
 
       <View style={tw`p-4`}>
-        {/* Arena Name */}
+        {/* Arena Name & Status */}
         <View style={tw`flex-row justify-between items-start mb-2`}>
           <View style={tw`flex-1 mr-2`}>
             <Text style={tw`text-lg font-bold text-gray-900 leading-tight`}>
@@ -139,23 +142,23 @@ const BookingCard = ({ booking, onCancel, isCancelling }) => {
           
           <View style={tw`px-2 py-1 rounded-md ${isCancelled ? 'bg-red-50' : 'bg-green-50'}`}>
             <Text style={tw`text-xs font-bold ${isCancelled ? 'text-red-700' : 'text-green-700'} uppercase`}>
-              {isCancelled ? "Cancelled" : "Confirmed"}
+              {isCancelled ? "Cancelled" : (isPast ? "Completed" : "Confirmed")}
             </Text>
           </View>
         </View>
 
-        {/* Directions Button */}
+        {/* --- 🔥 NEW SMALL GET DIRECTION BUTTON --- */}
         <Pressable 
             onPress={handleDirectionPress}
             disabled={loadingMap}
-            style={tw`flex-row items-center justify-center bg-blue-600 py-2.5 rounded-lg mb-4 shadow-sm active:bg-blue-700`}
+            style={tw`flex-row items-center self-start bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-full mb-3 active:bg-blue-100`}
         >
             {loadingMap ? (
-                <ActivityIndicator size="small" color="white" />
+                <ActivityIndicator size="small" color="#2563EB" />
             ) : (
                 <>
-                    <MaterialIcons name="directions" size={20} color="white" style={tw`mr-2`} />
-                    <Text style={tw`text-white font-bold text-sm`}>Get Directions</Text>
+                    <MaterialIcons name="directions" size={16} color="#2563EB" style={tw`mr-1`} />
+                    <Text style={tw`text-blue-600 font-bold text-xs`}>Get Direction</Text>
                 </>
             )}
         </Pressable>
@@ -192,8 +195,8 @@ const BookingCard = ({ booking, onCancel, isCancelling }) => {
           <Text style={tw`font-bold text-green-700 text-base`}>Rs. {booking.amountPaid}</Text>
         </View>
 
-        {/* Cancel Actions */}
-        {isUpcoming && (
+        {/* Cancel Actions - Only show if Upcoming */}
+        {!isPast && isUpcoming && (
           <View style={tw`mt-4 pt-3 border-t border-gray-100`}>
             {canCancel ? (
               <Pressable
@@ -226,9 +229,9 @@ const BookingCard = ({ booking, onCancel, isCancelling }) => {
 
         {isCancelled && (
           <View style={tw`mt-3 bg-red-50 p-2 rounded-lg border border-red-100`}>
-             <Text style={tw`text-xs text-red-600 text-center`}>
+              <Text style={tw`text-xs text-red-600 text-center`}>
                 Refund initiated to {refundAccountDisplay}
-             </Text>
+              </Text>
           </View>
         )}
       </View>
@@ -244,6 +247,9 @@ export default function HistoryScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [cancellingId, setCancellingId] = useState(null);
+  
+  // --- 🔥 NEW: Tab State ---
+  const [activeTab, setActiveTab] = useState('present'); // 'past', 'present', 'future'
 
   useFocusEffect(
     useCallback(() => {
@@ -259,8 +265,7 @@ export default function HistoryScreen() {
       );
 
       const querySnapshot = await getDocs(q);
-      const now = moment();
-
+      
       const bookingsList = querySnapshot.docs
         .map((docSnap) => {
             const data = docSnap.data();
@@ -277,12 +282,10 @@ export default function HistoryScreen() {
         })
         .filter((booking) => {
           if (booking.status === "completed_and_paid") return false; 
-          if (booking.sortTime.isBefore(now) && booking.status !== 'upcoming') {
-              return false;
-          }
+          // REMOVED: Date filter here so we can show Past bookings in the tab
           return true;
         })
-        .sort((a, b) => a.sortTime.valueOf() - b.sortTime.valueOf());
+        .sort((a, b) => b.sortTime.valueOf() - a.sortTime.valueOf()); // Sort descending (newest first) generally
 
       setBookings(bookingsList);
     } catch (error) {
@@ -295,6 +298,36 @@ export default function HistoryScreen() {
       setRefreshing(false);
     }
   };
+
+  // --- 🔥 NEW: Filtering Logic based on Tabs ---
+  const filteredBookings = useMemo(() => {
+      const today = moment().startOf('day');
+
+      return bookings.filter(booking => {
+          const bookingDate = moment(booking.sortTime).startOf('day');
+
+          if (activeTab === 'past') {
+              // Strictly before today
+              return bookingDate.isBefore(today);
+          } else if (activeTab === 'present') {
+              // Strictly today
+              return bookingDate.isSame(today);
+          } else if (activeTab === 'future') {
+              // Strictly after today
+              return bookingDate.isAfter(today);
+          }
+          return false;
+      }).sort((a, b) => {
+          // For Future: Ascending (soonest first)
+          // For Past: Descending (most recent past first)
+          if (activeTab === 'future') {
+              return a.sortTime.valueOf() - b.sortTime.valueOf();
+          }
+          return b.sortTime.valueOf() - a.sortTime.valueOf();
+      });
+
+  }, [bookings, activeTab]);
+
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -353,30 +386,55 @@ export default function HistoryScreen() {
     }
   };
 
+  // --- 🔥 Component for Tab Button ---
+  const TabButton = ({ title, value }) => {
+      const isActive = activeTab === value;
+      return (
+          <Pressable 
+              onPress={() => setActiveTab(value)}
+              style={tw.style(
+                  `flex-1 items-center py-3 border-b-2`,
+                  isActive ? `border-green-600` : `border-transparent`
+              )}
+          >
+              <Text style={tw.style(
+                  `font-bold text-sm`,
+                  isActive ? `text-green-800` : `text-gray-400`
+              )}>
+                  {title}
+              </Text>
+          </Pressable>
+      );
+  }
+
   return (
-    // ✅ BACKGROUND UPDATE: SafeAreaView Green taake Top Notch Green ho
     <SafeAreaView style={tw`flex-1 bg-green-900`}>
-        {/* ✅ DUPLICATE HEADER REMOVED: Default header hide kar diya */}
         <Stack.Screen options={{ headerShown: false }} />
-        
-        {/* ✅ STATUS BAR: White text, Green BG */}
         <StatusBar barStyle="light-content" backgroundColor="#14532d" />
        
-       {/* ✅ CUSTOM HEADER: Matches Theme */}
-      <View style={tw`px-5 py-4 bg-green-900 pb-6`}>
+      {/* Header */}
+      <View style={tw`px-5 py-4 bg-green-900 pb-2`}>
         <Text style={tw`text-2xl font-bold text-white`}>My Bookings</Text>
-        <Text style={tw`text-green-100 text-xs mt-1`}>Your upcoming games schedule</Text>
+        <Text style={tw`text-green-100 text-xs mt-1 mb-2`}>Your complete games history</Text>
       </View>
 
-      {/* ✅ BODY: Wapis Light Gray Background */}
+      {/* ✅ BODY: Light Gray Background */}
       <View style={tw`flex-1 bg-gray-50 rounded-t-3xl overflow-hidden`}>
+          
+          {/* --- 🔥 NEW: TABS SECTION --- */}
+          <View style={tw`flex-row bg-white border-b border-gray-200 px-2`}>
+              <TabButton title="Past" value="past" />
+              <TabButton title="Present" value="present" />
+              <TabButton title="Future" value="future" />
+          </View>
+
           {loading ? (
             <ActivityIndicator size="large" color={tw.color("green-600")} style={tw`mt-20`} />
           ) : (
             <FlatList
-              data={bookings}
+              data={filteredBookings}
               keyExtractor={(item) => item.id}
-              contentContainerStyle={tw`p-5 pb-32`} // Extra padding for floating tabs
+              contentContainerStyle={tw`p-5 pb-32`}
               refreshControl={
                 <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[tw.color("green-600")]} />
               }
@@ -390,19 +448,27 @@ export default function HistoryScreen() {
               ListEmptyComponent={
                 <View style={tw`items-center justify-center mt-20 px-10`}>
                   <View style={tw`bg-gray-100 p-6 rounded-full mb-4`}>
-                    <Ionicons name="calendar-outline" size={50} color={tw.color("gray-400")} />
+                    <Ionicons 
+                        name={activeTab === 'past' ? "time-outline" : activeTab === 'future' ? "calendar-outline" : "today-outline"} 
+                        size={50} 
+                        color={tw.color("gray-400")} 
+                    />
                   </View>
-                  <Text style={tw`text-lg font-bold text-gray-800`}>No Upcoming Bookings</Text>
+                  <Text style={tw`text-lg font-bold text-gray-800 capitalize`}>No {activeTab} Bookings</Text>
                   <Text style={tw`text-center text-gray-500 mt-2 mb-6 leading-5`}>
-                    Your scheduled games will appear here with full details.
+                    {activeTab === 'past' ? "You haven't played any games in the past." : 
+                     activeTab === 'present' ? "No games scheduled for today." : 
+                     "No upcoming games found."}
                   </Text>
                   
-                  <Pressable 
-                    onPress={() => router.push("/(player)/home")}
-                    style={tw`bg-green-700 px-6 py-3 rounded-full shadow-lg shadow-green-200`}
-                  >
-                    <Text style={tw`text-white font-bold`}>Book a Court Now</Text>
-                  </Pressable>
+                  {activeTab !== 'past' && (
+                      <Pressable 
+                        onPress={() => router.push("/(player)/home")}
+                        style={tw`bg-green-700 px-6 py-3 rounded-full shadow-lg shadow-green-200`}
+                      >
+                        <Text style={tw`text-white font-bold`}>Book a Court Now</Text>
+                      </Pressable>
+                  )}
                 </View>
               }
             />

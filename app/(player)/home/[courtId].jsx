@@ -5,7 +5,8 @@ import {
   doc,
   getDoc,
   runTransaction,
-  serverTimestamp
+  serverTimestamp,
+  updateDoc
 } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import {
@@ -35,6 +36,9 @@ export default function CourtDetailScreen() {
   const [selectedSlots, setSelectedSlots] = useState([]);
   const [isPaymentModalVisible, setIsPaymentModalVisible] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  
+  // 🔥 State: To handle loading when locking slots
+  const [isLocking, setIsLocking] = useState(false);
 
   // --- Fetch Court ---
   useEffect(() => {
@@ -85,7 +89,93 @@ export default function CourtDetailScreen() {
 
   const handleSlotsChange = (slots) => setSelectedSlots(slots);
 
-  const handleConfirmPayment = async (refundAccount) => {
+  // ==========================================
+  // 🔥 LOGIC 1: LOCK SLOTS (Book Now Press) - FIXED
+  // ==========================================
+  const handleLockAndShowModal = async () => {
+    if (!user || selectedSlots.length === 0) return;
+    
+    setIsLocking(true);
+    const bookingDateStr = selectedSlots[0].dateStr;
+    const slotDocId = `${courtId}_${bookingDateStr}`;
+    const slotRef = doc(db, "court_slots", slotDocId);
+
+    try {
+        await runTransaction(db, async (transaction) => {
+            const slotDoc = await transaction.get(slotRef);
+            
+            // ✅ Fix: Agar doc nahi hai to empty object lo, Error mat phenko
+            let slotsMap = {};
+            if (slotDoc.exists()) {
+                slotsMap = slotDoc.data().slots || {};
+            }
+
+            // Check availability
+            for (const slot of selectedSlots) {
+                const currentStatus = slotsMap[slot.hour];
+                if (currentStatus && currentStatus !== "available") {
+                    throw new Error(`Slot ${slot.timeDisplay} is already taken!`);
+                }
+            }
+
+            // Update local map to 'pending_payment'
+            const newSlotsMap = { ...slotsMap };
+            selectedSlots.forEach(slot => {
+                newSlotsMap[slot.hour] = "pending_payment"; 
+            });
+
+            // ✅ Fix: 'set' use karein with merge: true (Creates new doc if missing)
+            transaction.set(slotRef, { 
+                courtId: courtId, 
+                date: bookingDateStr,
+                slots: newSlotsMap 
+            }, { merge: true });
+        });
+
+        // Transaction Success -> Open Modal
+        setIsPaymentModalVisible(true);
+
+    } catch (error) {
+        Alert.alert("Slot Unavailable", error.message || "Someone just grabbed this slot.");
+        setRefreshKey(prev => prev + 1);
+        setSelectedSlots([]);
+    } finally {
+        setIsLocking(false);
+    }
+  };
+
+  // ==========================================
+  // 🔥 LOGIC 2: UNLOCK SLOTS (Cancel/Close Modal)
+  // ==========================================
+  const handleUnlockSlots = async () => {
+    if (selectedSlots.length === 0) {
+        setIsPaymentModalVisible(false);
+        return;
+    }
+
+    const bookingDateStr = selectedSlots[0].dateStr;
+    const slotDocId = `${courtId}_${bookingDateStr}`;
+    const slotRef = doc(db, "court_slots", slotDocId);
+
+    try {
+        const updates = {};
+        selectedSlots.forEach(slot => {
+            updates[`slots.${slot.hour}`] = "available";
+        });
+
+        await updateDoc(slotRef, updates);
+        
+    } catch (error) {
+        console.error("Error unlocking slots:", error);
+    } finally {
+        setIsPaymentModalVisible(false);
+    }
+  };
+
+  // ==========================================
+  // 🔥 LOGIC 3: CONFIRM PAYMENT (Final Booking)
+  // ==========================================
+  const handleConfirmPayment = async () => {
     if (!user || selectedSlots.length === 0 || !court) return;
 
     const bookingDateStr = selectedSlots[0].dateStr;
@@ -96,20 +186,28 @@ export default function CourtDetailScreen() {
 
     try {
       await runTransaction(db, async (transaction) => {
+        // 1. Sanity Check
         const slotDoc = await transaction.get(slotRef);
-        let slotsMap = slotDoc.exists() ? slotDoc.data().slots || {} : {};
+        if (!slotDoc.exists()) throw new Error("Slot data missing."); // Ab doc hona lazmi hai
+
+        let slotsMap = slotDoc.data().slots || {};
         const hoursToBook = [];
         const timeDisplays = [];
 
         for (const slot of selectedSlots) {
-            if (slotsMap[slot.hour] && slotsMap[slot.hour] !== "available") {
-                throw new Error(`Slot ${slot.timeDisplay} is no longer available.`);
+            const status = slotsMap[slot.hour];
+            
+            // Allow if status is 'available' OR 'pending_payment' (locked by us)
+            if (status !== "available" && status !== "pending_payment") {
+                throw new Error(`Slot ${slot.timeDisplay} was taken by someone else.`);
             }
+            
             hoursToBook.push(slot.hour);
             timeDisplays.push(slot.timeDisplay);
-            slotsMap[slot.hour] = user.uid; 
+            slotsMap[slot.hour] = user.uid; // Finalize with User ID
         }
 
+        // 2. Update Slots to Booked
         transaction.set(slotRef, {
             courtId: courtId,
             ownerId: court.ownerId,
@@ -117,6 +215,7 @@ export default function CourtDetailScreen() {
             slots: slotsMap,
           }, { merge: true });
 
+        // 3. Create Booking Record
         const newBookingData = {
           playerId: user.uid,
           playerName: userData?.name || "Player",
@@ -133,25 +232,28 @@ export default function CourtDetailScreen() {
           totalPrice: totalCost,
           amountPaid: totalCost,
           pendingBalance: 0,
-          playerRefundAccount: refundAccount,
+          playerRefundAccount: "Online Payment (Gateway)",
           createdAt: serverTimestamp(),
           slotCount: selectedSlots.length
         };
         transaction.set(doc(bookingCollectionRef), newBookingData);
       });
-      setIsPaymentModalVisible(false);
+
+      // Success
+      setIsPaymentModalVisible(false); 
       setSelectedSlots([]); 
       setRefreshKey((prev) => prev + 1);
       Alert.alert("Success", "Booking confirmed successfully!");
+
     } catch (error) {
       Alert.alert("Booking Failed", error.message);
+      // Agar fail hua, to unlock logic chalega jab user modal close karega
     }
   };
 
   if (loading) return <View style={tw`flex-1 items-center justify-center bg-gray-50`}><ActivityIndicator size="large" color="#15803d" /></View>;
   if (!court) return null;
 
-  // Image Logic
   const imageSource = court.courtImageURL 
     ? { uri: court.courtImageURL } 
     : (court.courtImageUrl 
@@ -169,14 +271,11 @@ export default function CourtDetailScreen() {
     <View style={tw`flex-1 bg-gray-50`}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       
-      {/* 🔥 ScrollView contains EVERYTHING now */}
       <ScrollView 
         style={tw`flex-1`} 
-        // 🔥 Extra padding bottom (pb-40) taake button tab bar ke upar clear nazar aaye
         contentContainerStyle={tw`pb-40`} 
       > 
-        
-        {/* Court Image Header */}
+        {/* Header Image */}
         <ImageBackground
             source={imageSource} 
             style={tw`h-80 w-full justify-end bg-green-900`} 
@@ -211,7 +310,7 @@ export default function CourtDetailScreen() {
             </View>
         </ImageBackground>
 
-        {/* Slot Picker Content */}
+        {/* Slot Picker */}
         <View style={tw`px-4 pt-6 -mt-8 bg-gray-50 rounded-t-3xl shadow-lg min-h-[300px]`}>
             <SlotPicker
                 courtId={courtId}
@@ -221,7 +320,7 @@ export default function CourtDetailScreen() {
             />
         </View>
 
-        {/* 🔥 BOOKING SECTION (Moved INSIDE ScrollView) */}
+        {/* Booking & Price Section */}
         <View style={tw`mx-4 mt-8 bg-white p-4 rounded-xl shadow-md border border-gray-100`}>
             <View style={tw`flex-row items-center justify-between`}>
                 <View>
@@ -242,18 +341,25 @@ export default function CourtDetailScreen() {
                     )}
                 </View>
 
+                {/* Lock Button */}
                 <Pressable
-                    onPress={() => setIsPaymentModalVisible(true)}
-                    disabled={totalSlots === 0 || !user}
+                    onPress={handleLockAndShowModal}
+                    disabled={totalSlots === 0 || !user || isLocking}
                     style={({pressed}) => tw.style(
                         `px-6 py-3.5 rounded-xl flex-row items-center shadow-sm`,
-                        (totalSlots === 0 || !user) ? `bg-gray-300` : (pressed ? `bg-green-900` : `bg-green-800`)
+                        (totalSlots === 0 || !user || isLocking) ? `bg-gray-300` : (pressed ? `bg-green-900` : `bg-green-800`)
                     )}
                 >
-                    <Text style={tw`text-white font-bold text-base mr-2`}>
-                        {user ? "Book Now" : "Login"}
-                    </Text>
-                    {user && <Ionicons name="arrow-forward" size={18} color="white" />}
+                    {isLocking ? (
+                         <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                        <View style={tw`flex-row items-center`}>
+                            <Text style={tw`text-white font-bold text-base mr-2`}>
+                                {user ? "Book Now" : "Login"}
+                            </Text>
+                            {user && <Ionicons name="arrow-forward" size={18} color="white" />}
+                        </View>
+                    )}
                 </Pressable>
             </View>
         </View>
@@ -264,7 +370,7 @@ export default function CourtDetailScreen() {
       {selectedSlots.length > 0 && (
         <PaymentModal
           visible={isPaymentModalVisible}
-          onClose={() => setIsPaymentModalVisible(false)}
+          onClose={handleUnlockSlots} // Pass Unlock logic here
           onConfirmPayment={handleConfirmPayment}
           bookingDetails={{
             arenaName: court.arenaName,

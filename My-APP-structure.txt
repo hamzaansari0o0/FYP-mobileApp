@@ -130,6 +130,17 @@ My-APP — complete repository file tree (relative paths)
 │        ├─ MatchScheduleList.jsx
 │        ├─ RegisteredTeamList.jsx
 │        └─ UpdateScoreModal.jsx
+├─ functions/
+│  ├─ .gitignore
+│  ├─ package-lock.json
+│  ├─ package.json
+│  ├─ src/
+│  │  └─ index.ts
+│  └─ tsconfig.json
+├─ firebase.json
+├─ .firebaserc
+├─ services/
+│  └─ aiService.js
 ├─ constants/
 │  └─ theme.ts
 ├─ context/

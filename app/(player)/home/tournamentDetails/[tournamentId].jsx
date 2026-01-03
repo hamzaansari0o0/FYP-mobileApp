@@ -1,5 +1,5 @@
-import { Ionicons } from '@expo/vector-icons';
-import { Link, Stack, useLocalSearchParams, useRouter } from 'expo-router'; // Stack import kiya
+import { Ionicons, MaterialIcons } from '@expo/vector-icons'; // MaterialIcons added
+import { Link, Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import {
   collection,
   doc, getDoc,
@@ -10,6 +10,8 @@ import moment from 'moment';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator, Alert,
+  Linking,
+  Platform, // Added
   Pressable, SectionList, StatusBar,
   Text,
   View
@@ -18,7 +20,23 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
 import { db } from '../../../../firebase/firebaseConfig';
 
-// === 1. Countdown Timer Component ===
+// === 🔥 1. MAP OPENING LOGIC (From History Screen) ===
+const openMapsForDirections = (lat, lng, label) => {
+    const scheme = Platform.select({ ios: 'maps:0,0?q=', android: 'geo:0,0?q=' });
+    const latLng = `${lat},${lng}`;
+    const labelEncoded = encodeURIComponent(label);
+    
+    const url = Platform.select({
+        ios: `${scheme}${labelEncoded}@${latLng}`,
+        android: `${scheme}${latLng}(${labelEncoded})`
+    });
+
+    Linking.openURL(url).catch(err => {
+        Linking.openURL(`http://googleusercontent.com/maps.google.com/maps?q=${lat},${lng}`);
+    });
+};
+
+// === 2. Countdown Timer Component ===
 const CountdownTimer = ({ deadline }) => {
   const calculateTimeLeft = () => {
     const difference = deadline.getTime() - new Date().getTime();
@@ -68,7 +86,7 @@ const TimeBlock = ({ value, label }) => (
   </View>
 );
 
-// === 2. DetailRow Component ===
+// === 3. DetailRow Component ===
 const DetailRow = ({ icon, label, value }) => (
   <View style={tw`flex-row items-center mb-3 bg-white p-3 rounded-lg shadow-sm border border-gray-100`}>
     <View style={tw`bg-green-100 p-2 rounded-full`}>
@@ -81,7 +99,7 @@ const DetailRow = ({ icon, label, value }) => (
   </View>
 );
 
-// === 3. Winner Banner ===
+// === 4. Winner Banner ===
 const WinnerBanner = ({ winnerName }) => (
   <View style={tw`bg-yellow-50 border border-yellow-200 p-5 rounded-xl mb-6 items-center shadow-sm`}>
     <Ionicons name="trophy" size={40} color="#ca8a04" />
@@ -90,7 +108,7 @@ const WinnerBanner = ({ winnerName }) => (
   </View>
 );
 
-// === 4. Registration Closed Banner ===
+// === 5. Registration Closed Banner ===
 const RegistrationClosedBanner = ({ startDate }) => (
   <View style={tw`bg-red-50 border border-red-200 p-4 rounded-xl mb-6 flex-row items-center`}>
     <Ionicons name="alert-circle" size={32} color="#b91c1c" />
@@ -103,7 +121,7 @@ const RegistrationClosedBanner = ({ startDate }) => (
   </View>
 );
 
-// === 5. Player Match Card ===
+// === 6. Player Match Card ===
 const PlayerMatchCard = ({ match }) => {
   const isCompleted = match.status === 'completed';
   const winnerId = match.winner?.id;
@@ -157,6 +175,7 @@ export default function TournamentDetailsScreen() {
   const [tournament, setTournament] = useState(null);
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMap, setLoadingMap] = useState(false); // 🔥 For Map Loading
 
   // --- Fetch Data ---
   useEffect(() => {
@@ -210,6 +229,58 @@ export default function TournamentDetailsScreen() {
     return Object.values(groups);
   }, [matches]);
 
+  // === 🔥 7. NEW: Handle Get Direction Logic ===
+  const handleGetDirection = async () => {
+    if (!tournament) return;
+    setLoadingMap(true);
+
+    try {
+        let lat = tournament.location?.latitude;
+        let lng = tournament.location?.longitude;
+        const arenaName = tournament.arenaName || "Arena";
+
+        // 1. Agar tournament me location already hai
+        if (lat && lng) {
+            openMapsForDirections(lat, lng, arenaName);
+            setLoadingMap(false);
+            return;
+        }
+
+        // 2. Agar nahi, to Arena Owner se fetch kro (using arenaId)
+        if (tournament.arenaId) {
+            const ownerRef = doc(db, "users", tournament.arenaId);
+            const ownerSnap = await getDoc(ownerRef);
+
+            if (ownerSnap.exists()) {
+                const ownerData = ownerSnap.data();
+                if (ownerData.location && ownerData.location.latitude) {
+                    lat = ownerData.location.latitude;
+                    lng = ownerData.location.longitude;
+                    openMapsForDirections(lat, lng, ownerData.arenaName || arenaName);
+                } else {
+                    Alert.alert("Location Not Found", "The arena owner hasn't set a pinned location.");
+                }
+            } else {
+                Alert.alert("Error", "Arena details not found.");
+            }
+        } else {
+            // 3. Fallback: Address Search
+             const address = tournament.arenaAddress || arenaName;
+             const url = Platform.select({
+                ios: `maps:0,0?q=${encodeURIComponent(address)}`,
+                android: `geo:0,0?q=${encodeURIComponent(address)}`
+            });
+            Linking.openURL(url);
+        }
+
+    } catch (error) {
+        console.error("Map Error:", error);
+        Alert.alert("Error", "Could not fetch location.");
+    } finally {
+        setLoadingMap(false);
+    }
+  };
+
   if (loading) {
     return (
         <View style={tw`flex-1 bg-green-800 justify-center items-center`}>
@@ -250,7 +321,8 @@ export default function TournamentDetailsScreen() {
         <SectionList
           sections={groupedMatches}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={tw`p-5 pb-32`}
+          // Added pb-32 to give space for scrolling
+          contentContainerStyle={tw`p-5 pb-32`} 
           stickySectionHeadersEnabled={false}
           showsVerticalScrollIndicator={false}
 
@@ -260,9 +332,31 @@ export default function TournamentDetailsScreen() {
               <Text style={tw`text-2xl font-bold text-gray-900 mb-1`}>
                 {tournament.tournamentName}
               </Text>
-              <View style={tw`flex-row items-center mb-6`}>
-                <Ionicons name="location-outline" size={16} color="gray" />
-                <Text style={tw`text-gray-500 ml-1`}>Hosted by {tournament.arenaName}</Text>
+              
+              {/* ✅ HOST INFO & GET DIRECTION BUTTON */}
+              <View style={tw`flex-row items-center justify-between mb-6`}>
+                 <View style={tw`flex-row items-center flex-1 mr-2`}>
+                    <Ionicons name="location-outline" size={18} color="gray" />
+                    <Text style={tw`text-gray-500 ml-1`} numberOfLines={1}>
+                        Hosted by {tournament.arenaName}
+                    </Text>
+                 </View>
+                 
+                 {/* 🔥 UPDATED DIRECTION BUTTON (BLUE PILL STYLE) */}
+                 <Pressable 
+                    onPress={handleGetDirection}
+                    disabled={loadingMap}
+                    style={tw`flex-row items-center bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-full active:bg-blue-100`}
+                 >
+                    {loadingMap ? (
+                        <ActivityIndicator size="small" color="#2563EB" />
+                    ) : (
+                        <>
+                            <MaterialIcons name="directions" size={16} color="#2563EB" style={tw`mr-1`} />
+                            <Text style={tw`text-blue-600 font-bold text-xs`}>Get Direction</Text>
+                        </>
+                    )}
+                 </Pressable>
               </View>
 
               {/* Status Banners */}
@@ -327,21 +421,23 @@ export default function TournamentDetailsScreen() {
                 </View>
              ) : null
           }
-        />
 
-        {/* --- STICKY BOTTOM BUTTON (Register) --- */}
-        {isRegistrationOpen && (
-            <View style={tw`absolute bottom-0 left-0 right-0 p-5 bg-white border-t border-gray-100 shadow-lg`}>
-                <Link href={`/home/teamRegistration/${tournamentId}`} asChild>
-                <Pressable style={tw`bg-green-800 py-4 rounded-xl shadow-md flex-row justify-center items-center`}>
-                    <Ionicons name="person-add" size={20} color="white" style={tw`mr-2`} />
-                    <Text style={tw`text-white text-center text-lg font-bold`}>
-                        Register Team • ₹{tournament.entryFee}
-                    </Text>
-                </Pressable>
-                </Link>
-            </View>
-        )}
+          // Button Footer
+          ListFooterComponent={
+            isRegistrationOpen ? (
+                <View style={tw`mt-8 mb-5`}>
+                    <Link href={`/home/teamRegistration/${tournamentId}`} asChild>
+                    <Pressable style={tw`bg-green-800 py-4 rounded-xl shadow-md flex-row justify-center items-center`}>
+                        <Ionicons name="person-add" size={20} color="white" style={tw`mr-2`} />
+                        <Text style={tw`text-white text-center text-lg font-bold`}>
+                            Register Team • ₹{tournament.entryFee}
+                        </Text>
+                    </Pressable>
+                    </Link>
+                </View>
+            ) : null
+          }
+        />
       </View>
     </SafeAreaView>
   );
