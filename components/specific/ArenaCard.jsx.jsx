@@ -7,7 +7,7 @@ import tw from "twrnc";
 export default function ArenaCard({ arena }) {
   const arenaImage = arena.arenaImageUrl
     ? { uri: arena.arenaImageUrl }
-    : require("../../assets/images/hero-image.png"); 
+    : require("../../assets/images/hero-image.webp"); 
 
   return (
     <Link href={`/home/ownerDetails/${arena.id}`} asChild>
