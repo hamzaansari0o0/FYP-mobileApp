@@ -5,10 +5,10 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'; // updateDoc added
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { auth, db } from '../firebase/firebaseConfig';
-import { registerForPushNotificationsAsync } from '../utils/notifications'; // Import Notification Utility
+import { registerForPushNotificationsAsync } from '../utils/notifications';
 
 const AuthContext = createContext();
 
@@ -19,7 +19,6 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   // --- Helper to Save Token ---
-  // Ye function hum Login aur Signup dono mein use karenge code clean rakhne ke liye
   const saveUserPushToken = async (uid) => {
     try {
       const token = await registerForPushNotificationsAsync();
@@ -62,6 +61,7 @@ export function AuthProvider({ children }) {
               setUser(null);
             }
           } else {
+            // Agar email verified nahi hai, to state null rakho
             setUser(null);
             setRole(null);
             setUserData(null);
@@ -84,7 +84,7 @@ export function AuthProvider({ children }) {
     return () => unsubscribe(); 
   }, []);
 
-  // === SIGNUP FUNCTION ===
+  // === SIGNUP FUNCTION (UPDATED) ===
   const signup = async (formData, selectedRole) => {
     const { 
         email, password, name, mobileNumber, city, 
@@ -111,7 +111,7 @@ export function AuthProvider({ children }) {
     
     await setDoc(doc(db, 'users', newUser.uid), newUserData);
     
-    // 🔔 TOKEN SAVE Logic
+    // Token Save
     await saveUserPushToken(newUser.uid);
     
     try {
@@ -120,16 +120,25 @@ export function AuthProvider({ children }) {
       console.error("Error sending verification email: ", emailError);
       throw new Error("User created, but failed to send verification email.");
     }
+
+    // 👇 MAIN FIX: Force Logout immediately after signup
+    // Taake background session khatam ho jaye aur Login page par fresh login ho sake.
+    await signOut(auth);
   };
 
   // === LOGIN FUNCTION ===
   const login = async (email, password) => {
+    // Forcefully sign out first just in case any ghost session exists
+    try { await signOut(auth); } catch(e) {}
+
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const loggedInUser = userCredential.user;
 
+    // Reload user to get fresh emailVerified status
     await loggedInUser.reload();
+    
     if (!loggedInUser.emailVerified) {
-      await signOut(auth);
+      await signOut(auth); // Agar verify nahi hai to wapis bahar phenk do
       throw new Error("auth/email-not-verified");
     }
 
@@ -145,7 +154,7 @@ export function AuthProvider({ children }) {
       throw new Error("auth/user-disabled");
     }
 
-    // 🔔 TOKEN SAVE Logic (Login ke foran baad)
+    // Login Successful
     await saveUserPushToken(loggedInUser.uid);
   };
 

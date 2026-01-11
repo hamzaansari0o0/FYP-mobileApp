@@ -5,31 +5,27 @@ import {
   ActivityIndicator,
   Alert,
   ImageBackground,
-  Keyboard, // 1. Added Keyboard
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
   Text,
   TextInput,
-  TouchableWithoutFeedback, // 2. Added for Tap-to-Dismiss
+  TouchableWithoutFeedback,
   View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
 import { useAuth } from '../../context/AuthContext';
 
-// --- NEW PACKAGES ---
 import * as Location from 'expo-location';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 
-// --- IMAGE IMPORT ---
 const bgImage = require('../../assets/images/loginForm-image.jpg');
 
-// --- YAHAN APNI API KEY PASTE KAREIN ---
 const GOOGLE_API_KEY = "AIzaSyB32Zst4td-KdZcEXpzHL-nedXtIdBz1bw"; 
 
-// Role Button Component
 const RoleButton = ({ title, onPress, isSelected }) => (
   <Pressable
     style={tw.style(
@@ -86,7 +82,7 @@ export default function Signup() {
     }
   };
 
-  // --- 1. CURRENT LOCATION LOGIC ---
+  // --- CURRENT LOCATION LOGIC ---
   const handleCurrentLocation = async () => {
     setLoadingLocation(true);
     try {
@@ -184,7 +180,7 @@ export default function Signup() {
     }
   };
 
-  // --- 2. SIGNUP SUBMIT LOGIC ---
+  // --- SIGNUP SUBMIT LOGIC ---
   const handleSignup = async () => {
     if (!selectedRole) {
       setError('Please select a role (Player or Court Owner)');
@@ -229,7 +225,13 @@ export default function Signup() {
         'Check Your Inbox',
         `We have sent a verification link to ${formData.email}.\n\nPlease verify your email to activate your account.`,
         [
-          { text: 'Go to Login', onPress: () => router.replace('/(auth)/login') },
+          { 
+            text: 'Go to Login', 
+            onPress: () => {
+                // Ensure we navigate cleanly
+                router.replace('/(auth)/login');
+            } 
+          },
         ]
       );
       
@@ -249,23 +251,16 @@ export default function Signup() {
 
   return (
     <ImageBackground source={bgImage} style={tw`flex-1`} resizeMode="cover">
-      
-      {/* 3. Wrap with TouchableWithoutFeedback to dismiss keyboard */}
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        
         <View style={tw`flex-1 bg-black/60`}> 
           <SafeAreaView style={tw`flex-1`}>
-            
-            {/* 4. Keyboard Avoiding View */}
             <KeyboardAvoidingView 
                 behavior={Platform.OS === "ios" ? "padding" : "height"} 
                 style={tw`flex-1`}
             >
-              
               <ScrollView
                 style={tw`flex-1`}
-                contentContainerStyle={tw`p-6 pb-20`} // Added bottom padding
-                // 5. This is CRUCIAL for Google Places tap to work
+                contentContainerStyle={tw`p-6 pb-20`}
                 keyboardShouldPersistTaps='handled' 
                 showsVerticalScrollIndicator={false}
               >
@@ -320,7 +315,6 @@ export default function Signup() {
                           maxLength={11}
                         />
                         
-                        {/* --- LOCATION --- */}
                         <Text style={tw`text-sm font-bold text-gray-600 mb-1 ml-1`}>Location</Text>
                         <View style={tw`flex-row z-50 h-14 relative mb-2`}> 
                             <View style={tw`flex-1 absolute top-0 left-0 right-0 z-50`}>

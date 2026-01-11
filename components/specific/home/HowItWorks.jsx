@@ -1,12 +1,14 @@
-// /components/specific/home/HowItWorks.jsx
 import { Ionicons } from '@expo/vector-icons';
+import { ResizeMode, Video } from 'expo-av';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Dimensions, Pressable, ScrollView, Text, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 import tw from 'twrnc';
 
-const { width } = Dimensions.get('window');
+// Note: Make sure files exist at exactly this path
+const playerVideoSource = require('../../../assets/images/player-intro.mp4');
+const ownerVideoSource = require('../../../assets/images/owner-intro.mp4');
 
 const StepCard = ({ number, title, desc, icon, isLast }) => (
   <Animated.View entering={FadeInRight.delay(number * 150).duration(500)} style={tw`flex-row mb-6`}>
@@ -29,6 +31,7 @@ const StepCard = ({ number, title, desc, icon, isLast }) => (
 export default function HowItWorks() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('player');
+  const videoRef = useRef(null);
 
   return (
     <View style={tw`flex-1 bg-white`}>
@@ -58,14 +61,22 @@ export default function HowItWorks() {
             </Pressable>
         </View>
 
-        {/* Video Placeholder */}
-        <Animated.View entering={FadeInDown.duration(600)} style={tw`mx-6 h-48 bg-gray-900 rounded-3xl items-center justify-center mb-10 overflow-hidden shadow-lg`}>
-             {/* Future: Replace this with <Video /> component */}
-             <View style={tw`absolute inset-0 bg-green-900/40 z-0`} />
-             <Ionicons name="play-circle" size={64} color="white" style={tw`z-10 opacity-90`} />
-             <Text style={tw`text-white mt-2 font-bold z-10 tracking-widest uppercase text-xs`}>
-                 Watch {activeTab === 'player' ? 'Player' : 'Owner'} Tutorial
-             </Text>
+        {/* 🎥 VIDEO SECTION */}
+        <Animated.View 
+            entering={FadeInDown.duration(600)} 
+            style={tw`mx-6 h-56 bg-black rounded-3xl overflow-hidden shadow-lg mb-10 items-center justify-center`}
+        >
+             <Video
+                key={activeTab} 
+                ref={videoRef}
+                style={tw`w-full h-full`} // Style ensure karega size 0 na ho
+                source={activeTab === 'player' ? playerVideoSource : ownerVideoSource}
+                useNativeControls
+                resizeMode={ResizeMode.COVER}
+                shouldPlay={true} // ✅ YE ZAROORI HAI: Video auto-play hogi
+                isLooping={true}  // ✅ Loop on kar diya taake khatam na ho
+                onError={(e) => console.log("Video Error:", e)} // Console mein error dikhayega
+             />
         </Animated.View>
 
         {/* Steps Section */}

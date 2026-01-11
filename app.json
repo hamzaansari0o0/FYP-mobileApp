@@ -46,7 +46,8 @@
           "color": "#ffffff"
         }
       ],
-      "expo-router"
+      "expo-router",
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true,

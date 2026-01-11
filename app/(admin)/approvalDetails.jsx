@@ -5,10 +5,14 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   Text,
+  TextInput,
   TouchableOpacity,
   View
 } from 'react-native';
@@ -20,7 +24,6 @@ import * as ImagePicker from 'expo-image-picker';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytesResumable } from 'firebase/storage';
 import { db, storage } from '../../firebase/firebaseConfig';
-// 🔥 Notification Helper
 import { notifyUser } from '../../utils/notifications';
 
 export default function ApprovalDetailsScreen() {
@@ -31,8 +34,11 @@ export default function ApprovalDetailsScreen() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
 
-  const [modalVisible, setModalVisible] = useState(false);
+  const [imageModalVisible, setImageModalVisible] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
+
+  const [rejectModalVisible, setRejectModalVisible] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState("");
 
   useEffect(() => {
     const fetchData = async () => {
@@ -56,44 +62,60 @@ export default function ApprovalDetailsScreen() {
     fetchData();
   }, [id, type]);
 
-  // --- 🔥 UPDATED: Approve / Reject Logic with Notifications ---
-  const handleDecision = async (decision) => {
+  const handleDecisionClick = (decision) => {
+      if (decision === 'rejected') {
+          setRejectModalVisible(true);
+      } else {
+          processDecision('approved', null);
+      }
+  };
+
+  const processDecision = async (decision, reasonText) => {
+    if (decision === 'rejected') {
+        Keyboard.dismiss();
+        setRejectModalVisible(false);
+    }
+    
     setActionLoading(true);
+
     try {
       const collectionName = type === 'arena' ? 'users' : 'courts';
       const docRef = doc(db, collectionName, id);
 
-      await updateDoc(docRef, { status: decision });
+      const updateData = { 
+          status: decision,
+          rejectionReason: decision === 'rejected' ? reasonText : null 
+      };
 
-      // Notification Logic
+      await updateDoc(docRef, updateData);
+
       const isApproved = decision === 'approved';
       const targetOwnerId = type === 'arena' ? data.id : data.ownerId;
       const itemName = type === 'arena' ? data.arenaName : data.courtName;
-
+      
       let notifTitle = "";
       let notifBody = "";
       let notifType = isApproved ? "booking" : "alert";
 
       if (type === 'arena') {
-        notifTitle = isApproved ? "Arena Approved! 🏟️" : "Arena Update ⚠️";
+        notifTitle = isApproved ? "Arena Approved! 🏟️" : "Arena Application Rejected ⚠️";
         notifBody = isApproved 
-          ? `Congratulations! Your arena '${itemName}' has been approved. You can now add courts and receive bookings.`
-          : `Your registration for '${itemName}' was not approved at this time. Please contact support for details.`;
+          ? `Congratulations! Your arena '${itemName}' is live.`
+          : `Your arena '${itemName}' was rejected. Reason: "${reasonText}". Tap to edit details.`;
       } else {
-        notifTitle = isApproved ? "Court Approved! ✅" : "Court Update ❌";
+        notifTitle = isApproved ? "Court Approved! ✅" : "Court Rejected ❌";
         notifBody = isApproved 
-          ? `Great news! Your court '${itemName}' is now live and visible to all players.`
-          : `The request for court '${itemName}' was not approved. Please review your details.`;
+          ? `Great news! Your court '${itemName}' is now live.`
+          : `Your court '${itemName}' was rejected. Reason: "${reasonText}". Tap to fix.`;
       }
 
-      // Send Notification to Owner
       await notifyUser(targetOwnerId, notifTitle, notifBody, notifType, {
         url: '/(owner)/myCourt'
       });
 
       Alert.alert(
         isApproved ? "Approved!" : "Rejected",
-        `The ${type} has been ${decision} and the owner has been notified.`,
+        `Request processed successfully. Owner notified.`,
         [{ text: "OK", onPress: () => router.back() }]
       );
     } catch (error) {
@@ -101,10 +123,10 @@ export default function ApprovalDetailsScreen() {
       Alert.alert("Error", "Could not update status.");
     } finally {
       setActionLoading(false);
+      setRejectionReason(""); 
     }
   };
 
-  // --- Image Re-upload Logic (Admin Override) ---
   const handleReuploadImage = async (fieldToUpdate) => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
@@ -121,7 +143,6 @@ export default function ApprovalDetailsScreen() {
     if (!result.canceled) {
       const asset = result.assets[0];
       setActionLoading(true);
-
       try {
         const blob = await new Promise((resolve, reject) => {
           const xhr = new XMLHttpRequest();
@@ -134,7 +155,6 @@ export default function ApprovalDetailsScreen() {
 
         const path = type === 'arena' ? 'arenas' : 'courts';
         const storageRef = ref(storage, `${path}/admin_uploads/${id}_${Date.now()}`);
-        
         const uploadTask = await uploadBytesResumable(storageRef, blob);
         const downloadUrl = await getDownloadURL(uploadTask.ref);
         blob.close();
@@ -157,7 +177,7 @@ export default function ApprovalDetailsScreen() {
   const openZoom = (imageUrl) => {
     if (!imageUrl) return;
     setSelectedImage(imageUrl);
-    setModalVisible(true);
+    setImageModalVisible(true);
   };
 
   if (loading) {
@@ -230,7 +250,7 @@ export default function ApprovalDetailsScreen() {
         {type === 'arena' && (
           <View style={tw`mb-6`}>
             <View style={tw`flex-row justify-between items-center mb-2`}>
-               <Text style={tw`text-lg font-bold text-red-800`}>Legal Document (Private)</Text>
+               <Text style={tw`text-lg font-bold text-red-800`}>Legal Document</Text>
                <View style={tw`bg-red-100 px-2 py-1 rounded`}>
                  <Text style={tw`text-xs text-red-700 font-bold`}>CONFIDENTIAL</Text>
                </View>
@@ -249,6 +269,7 @@ export default function ApprovalDetailsScreen() {
         )}
       </ScrollView>
 
+      {/* FOOTER ACTIONS */}
       <View style={tw`absolute bottom-0 left-0 right-0 bg-white p-4 border-t border-gray-200 flex-row justify-between shadow-lg`}>
         {actionLoading ? (
            <View style={tw`flex-1 items-center`}>
@@ -259,13 +280,13 @@ export default function ApprovalDetailsScreen() {
           <>
             <Pressable 
               style={tw`flex-1 bg-white border border-red-500 py-3 rounded-lg mr-2 items-center`}
-              onPress={() => handleDecision('rejected')}
+              onPress={() => handleDecisionClick('rejected')}
             >
               <Text style={tw`text-red-600 font-bold text-lg`}>Reject ❌</Text>
             </Pressable>
             <Pressable 
               style={tw`flex-1 bg-green-600 py-3 rounded-lg ml-2 items-center shadow-sm`}
-              onPress={() => handleDecision('approved')}
+              onPress={() => handleDecisionClick('approved')}
             >
               <Text style={tw`text-white font-bold text-lg`}>Approve ✅</Text>
             </Pressable>
@@ -273,11 +294,12 @@ export default function ApprovalDetailsScreen() {
         )}
       </View>
 
-      <Modal visible={modalVisible} transparent={true} animationType="fade">
+      {/* IMAGE ZOOM MODAL */}
+      <Modal visible={imageModalVisible} transparent={true} animationType="fade">
         <View style={tw`flex-1 bg-black justify-center items-center`}>
           <TouchableOpacity 
             style={tw`absolute top-10 right-5 z-10 p-2 bg-gray-800 rounded-full`}
-            onPress={() => setModalVisible(false)}
+            onPress={() => setImageModalVisible(false)}
           >
             <Ionicons name="close" size={30} color="white" />
           </TouchableOpacity>
@@ -288,6 +310,73 @@ export default function ApprovalDetailsScreen() {
           />
         </View>
       </Modal>
+
+      {/* 🟢 REJECTION MODAL - FIXED KEYBOARD OVERLAP */}
+      <Modal 
+        visible={rejectModalVisible} 
+        transparent={true} 
+        animationType="slide"
+        onRequestClose={() => setRejectModalVisible(false)}
+      >
+        {/* 🔥 FIX 1: keyboardVerticalOffset helps push it up past headers */}
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={tw`flex-1 justify-end`} // Push content to bottom initially
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0} // Adjust this if still hidden
+        >
+          {/* Overlay Background */}
+          <TouchableOpacity 
+            style={tw`absolute inset-0 bg-black/60`} 
+            activeOpacity={1} 
+            onPress={() => setRejectModalVisible(false)}
+          />
+
+          {/* White Content Box */}
+          <View style={tw`bg-white rounded-t-3xl shadow-2xl overflow-hidden`}>
+            {/* 🔥 FIX 2: Internal ScrollView ensures you can scroll if keyboard takes too much space */}
+            <ScrollView 
+                contentContainerStyle={tw`p-6 pb-10`}
+                keyboardShouldPersistTaps="handled"
+            >
+                <View style={tw`flex-row justify-between items-center mb-4`}>
+                    <View style={tw`flex-row items-center`}>
+                        <View style={tw`bg-red-100 p-2 rounded-full mr-3`}>
+                            <Ionicons name="warning" size={24} color="#dc2626" />
+                        </View>
+                        <Text style={tw`text-xl font-bold text-gray-900`}>Reject Request</Text>
+                    </View>
+                    <TouchableOpacity onPress={() => setRejectModalVisible(false)}>
+                        <Ionicons name="close" size={24} color="#9ca3af" />
+                    </TouchableOpacity>
+                </View>
+
+                <Text style={tw`text-gray-500 mb-4 text-sm`}>
+                    Please provide a reason. This will be visible to the owner.
+                </Text>
+                
+                <TextInput
+                    style={tw`bg-gray-50 border border-gray-200 rounded-xl p-4 min-h-[120px] text-gray-800 text-base mb-6`}
+                    placeholder="e.g., Image is too blurry..."
+                    placeholderTextColor="#9ca3af"
+                    multiline
+                    textAlignVertical="top"
+                    value={rejectionReason}
+                    onChangeText={setRejectionReason}
+                    autoFocus={true} // Auto focus triggers keyboard
+                />
+
+                <Pressable 
+                    style={tw`bg-red-600 py-4 rounded-xl items-center shadow-md ${!rejectionReason.trim() ? 'opacity-50' : 'opacity-100'}`}
+                    onPress={() => processDecision('rejected', rejectionReason)}
+                    disabled={!rejectionReason.trim()}
+                >
+                    <Text style={tw`text-white font-bold text-lg`}>Confirm Rejection</Text>
+                </Pressable>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
     </SafeAreaView>
   );
 }

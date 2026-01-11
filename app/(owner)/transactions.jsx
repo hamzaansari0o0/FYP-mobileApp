@@ -1,22 +1,22 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Stack, useFocusEffect } from "expo-router";
 import {
-    collection,
-    getDocs,
-    orderBy,
-    query,
-    where
+  collection,
+  getDocs,
+  orderBy,
+  query,
+  where
 } from "firebase/firestore";
 import moment from "moment";
 import { useCallback, useState } from "react";
 import {
-    ActivityIndicator,
-    FlatList,
-    Pressable,
-    RefreshControl,
-    StatusBar,
-    Text,
-    View
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  StatusBar,
+  Text,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import tw from "twrnc";
@@ -240,7 +240,8 @@ export default function OwnerTransactions() {
           renderItem={({ item }) => (
             <TransactionCard booking={item} type={activeTab} />
           )}
-          contentContainerStyle={tw`px-5 pb-20 pt-2`}
+          // ✅ FIX: Bottom padding increased to pb-40 so content is not hidden behind Tab Bar
+          contentContainerStyle={tw`px-5 pb-40 pt-2`} 
           refreshControl={
             <RefreshControl 
                 refreshing={refreshing} 
