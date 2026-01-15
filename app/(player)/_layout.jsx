@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { getFocusedRouteNameFromRoute } from "@react-navigation/native"; // 1. IMPORT THIS
+import { getFocusedRouteNameFromRoute } from "@react-navigation/native";
 import { Tabs, useSegments } from "expo-router";
 import tw from "twrnc";
 
@@ -32,21 +32,19 @@ export default function PlayerTabLayout() {
         headerShown: false,
         tabBarActiveTintColor: "#ffffff",
         tabBarInactiveTintColor: "#86efac",
-        tabBarStyle: customTabBarStyle, // Default Style apply kiya
+        tabBarStyle: customTabBarStyle,
         tabBarLabelStyle: tw`text-[9px] font-medium mb-1`,
       }}
     >
-      {/* Tab 1: Home (Special Logic Applied Here) */}
+      {/* Tab 1: Home */}
       <Tabs.Screen
         name="home"
         options={({ route }) => {
-          // 🔥 MAGIC LOGIC: Check current screen inside Home Stack
           const routeName = getFocusedRouteNameFromRoute(route) ?? "";
           
-          // Agar user in pages par hai, to Tabs HIDE karein
           if (routeName === 'howItWorks' || routeName === 'about') {
             return {
-              tabBarStyle: { display: 'none' }, // Tabs Hidden
+              tabBarStyle: { display: 'none' },
               title: "Home",
               tabBarIcon: ({ color, focused }) => (
                 <Ionicons name={focused ? "home" : "home-outline"} size={24} color={color} />
@@ -54,7 +52,6 @@ export default function PlayerTabLayout() {
             };
           }
 
-          // Warna Normal Style
           return {
             title: "Home",
             tabBarIcon: ({ color, focused }) => (
@@ -75,15 +72,34 @@ export default function PlayerTabLayout() {
         }}
       />
 
-      {/* Tab 3: Chat */}
+      {/* Tab 3: Chat - 🔥 UPDATED LOGIC HERE 🔥 */}
       <Tabs.Screen
         name="chat"
-        options={{
-          title: "Chat",
-          tabBarStyle: { display: 'none' }, // Chat tab itself should hide bar when inside
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "chatbubbles" : "chatbubbles-outline"} size={24} color={color} />
-          ),
+        options={({ route }) => {
+          // Check karein ke Chat Stack mein konsi screen khuli hai
+          const routeName = getFocusedRouteNameFromRoute(route) ?? "index";
+
+          // Agar hum Chat Room ([chatId]) ya New Chat screen par hain -> TAB CHUPAO
+          if (routeName === '[chatId]' || routeName === 'new') {
+            return {
+              title: "Chat",
+              unmountOnBlur: true,
+              tabBarStyle: { display: 'none' }, // Yahan Tab Bar HIDE hoga
+              tabBarIcon: ({ color, focused }) => (
+                <Ionicons name={focused ? "chatbubbles" : "chatbubbles-outline"} size={24} color={color} />
+              ),
+            };
+          }
+
+          // Agar hum Chat List (index) par hain -> TAB DIKHAO
+          return {
+            title: "Chat",
+            unmountOnBlur: true,
+            tabBarStyle: customTabBarStyle, // Yahan Tab Bar SHOW hoga
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons name={focused ? "chatbubbles" : "chatbubbles-outline"} size={24} color={color} />
+            ),
+          };
         }}
       />
 
@@ -98,7 +114,6 @@ export default function PlayerTabLayout() {
         }}
       />
 
-      {/* --- HIDDEN TABS --- */}
       <Tabs.Screen name="schedule" options={{ href: null }} />
       <Tabs.Screen name="notifications" options={{ href: null }} />
     </Tabs>

@@ -1,15 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { ResizeMode, Video } from 'expo-av';
 import { useRouter } from 'expo-router';
-import { useRef, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { getDownloadURL, getStorage, ref } from 'firebase/storage'; // 🔥 ADDED THIS
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 import tw from 'twrnc';
 
-// Note: Make sure files exist at exactly this path
-const playerVideoSource = require('../../../assets/images/player-intro.mp4');
-const ownerVideoSource = require('../../../assets/images/owner-intro.mp4');
-
+// Step Card Component (No changes here)
 const StepCard = ({ number, title, desc, icon, isLast }) => (
   <Animated.View entering={FadeInRight.delay(number * 150).duration(500)} style={tw`flex-row mb-6`}>
     <View style={tw`items-center mr-4`}>
@@ -32,6 +30,38 @@ export default function HowItWorks() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('player');
   const videoRef = useRef(null);
+
+  // 🔥 STATE: Video URLs store karne ke liye
+  const [videoUrls, setVideoUrls] = useState({ player: null, owner: null });
+  const [loading, setLoading] = useState(true);
+
+  // 🔥 EFFECT: Firebase Storage se URL fetch karna
+  useEffect(() => {
+    const fetchVideoUrls = async () => {
+      try {
+        const storage = getStorage();
+        
+        // References create karein
+        const playerRef = ref(storage, 'player-intro.mp4');
+        const ownerRef = ref(storage, 'owner-intro.mp4');
+
+        // URLs fetch karein
+        // Promise.all use kiya taake dono ek sath load hon
+        const [playerUrl, ownerUrl] = await Promise.all([
+          getDownloadURL(playerRef),
+          getDownloadURL(ownerRef)
+        ]);
+
+        setVideoUrls({ player: playerUrl, owner: ownerUrl });
+      } catch (error) {
+        console.error("Error fetching video URLs:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchVideoUrls();
+  }, []);
 
   return (
     <View style={tw`flex-1 bg-white`}>
@@ -64,19 +94,27 @@ export default function HowItWorks() {
         {/* 🎥 VIDEO SECTION */}
         <Animated.View 
             entering={FadeInDown.duration(600)} 
-            style={tw`mx-6 h-56 bg-black rounded-3xl overflow-hidden shadow-lg mb-10 items-center justify-center`}
+            style={tw`mx-6 h-56 bg-black rounded-3xl overflow-hidden shadow-lg mb-10 items-center justify-center relative`}
         >
-             <Video
-                key={activeTab} 
-                ref={videoRef}
-                style={tw`w-full h-full`} // Style ensure karega size 0 na ho
-                source={activeTab === 'player' ? playerVideoSource : ownerVideoSource}
-                useNativeControls
-                resizeMode={ResizeMode.COVER}
-                shouldPlay={true} // ✅ YE ZAROORI HAI: Video auto-play hogi
-                isLooping={true}  // ✅ Loop on kar diya taake khatam na ho
-                onError={(e) => console.log("Video Error:", e)} // Console mein error dikhayega
-             />
+             {loading ? (
+                // Jab tak URL fetch ho raha hai, Loading Spinner dikhao
+                <ActivityIndicator size="large" color="#4ade80" />
+             ) : (
+                 <Video
+                    key={activeTab} 
+                    ref={videoRef}
+                    style={tw`w-full h-full`}
+                    // 🔥 CHANGE: Ab 'uri' use kar rahe hain jo Firebase se aaya hai
+                    source={{ 
+                        uri: activeTab === 'player' ? videoUrls.player : videoUrls.owner 
+                    }}
+                    useNativeControls
+                    resizeMode={ResizeMode.COVER}
+                    shouldPlay={true}
+                    isLooping={true}
+                    onError={(e) => console.log("Video Error:", e)}
+                 />
+             )}
         </Animated.View>
 
         {/* Steps Section */}

@@ -1,22 +1,26 @@
-import React, { useState, useCallback } from 'react';
-import { 
-  View, Text, ActivityIndicator, 
-  FlatList, SectionList, Alert 
+import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
+import {
+  collection,
+  doc, getDoc,
+  getDocs,
+  orderBy,
+  query, where
+} from 'firebase/firestore';
+import React, { useCallback, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  SectionList,
+  Text,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
 import { useAuth } from '../../../context/AuthContext';
 import { db } from '../../../firebase/firebaseConfig';
-import { 
-  collection, query, where, getDocs, doc, getDoc, 
-  orderBy // 1. 'orderBy' import karein (sorting ke liye)
-} from 'firebase/firestore';
-import { useFocusEffect } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import moment from 'moment';
 
 // === 2. MATCH CARD (Updated) ===
-// Ismein 'playerTeam' prop add kiya gaya hai (highlighting ke liye)
 const MatchCard = ({ match, playerTeam }) => {
   const isCompleted = match.status === 'completed';
   
@@ -174,8 +178,9 @@ export default function MatchScheduleScreen() {
         <SectionList
           sections={scheduleData}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={tw`p-4`}
-          // === 4. RENDER ITEM UPDATE ===
+          // 🔥 Updated here: Added pb-24 for bottom padding
+          contentContainerStyle={tw`p-4 pb-24`}
+          
           // 'myTeam' prop ko MatchCard mein pass karein
           renderItem={({ item, section }) => (
             <MatchCard match={item} playerTeam={section.myTeam} />

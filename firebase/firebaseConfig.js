@@ -6,7 +6,7 @@ import {
   initializeAuth
 } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
-import { getFunctions } from "firebase/functions"; // 👈 CHANGE 1: Ye import add karein
+// ❌ REMOVED: Functions ka import hata diya
 import { getStorage } from "firebase/storage";
 import { Platform } from 'react-native';
 
@@ -35,9 +35,8 @@ const auth = initializeAuth(app, {
 const db = getFirestore(app);
 const storage = getStorage(app);
 
-// 👇 CHANGE 2: Functions ko initialize karein
-const functions = getFunctions(app, 'us-central1'); 
-// 'us-central1' is liye likha kyunki deploy karte waqt yahi region tha.
+// ❌ REMOVED: Functions initialize karne wali line hata di
 
-// 👇 CHANGE 3: Export mein 'functions' bhi add karein
-export { auth, db, functions, storage };
+// 👇 Export update kar diya (functions nikal diya)
+export { auth, db, storage };
+

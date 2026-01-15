@@ -1,11 +1,11 @@
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { Link, Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, ImageBackground, Linking, Platform, Pressable, StatusBar, Text, View } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import tw from 'twrnc';
 
-// Imports
+// Imports (Relative paths preserved based on your folder structure)
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import CourtCard from '../../../../components/CourtCard';
 import { db } from '../../../../firebase/firebaseConfig';
@@ -26,7 +26,7 @@ const openMapsForDirections = (lat, lng, label) => {
     });
 };
 
-// --- Header Component (Fixed Styles) ---
+// --- Header Component ---
 const ArenaHeader = ({ arena }) => {
   const router = useRouter();
   
@@ -45,10 +45,8 @@ const ArenaHeader = ({ arena }) => {
           resizeMode="cover"
           style={tw`flex-1`}
         >
-          {/* Simple Dark Overlay (Replaces Gradient) */}
           <View style={tw`absolute inset-0 bg-black/40`} />
           
-          {/* Back Button */}
           <Pressable 
             onPress={() => router.back()} 
             style={tw`absolute top-12 left-5 bg-black/30 p-2.5 rounded-full z-10 border border-white/20`}
@@ -56,7 +54,6 @@ const ArenaHeader = ({ arena }) => {
             <Ionicons name="arrow-back" size={24} color="white" />
           </Pressable>
 
-          {/* Bottom Content */}
           <View style={tw`absolute bottom-0 left-0 right-0 p-6`}>
             <View style={tw`flex-row items-center mb-2`}>
                 <View style={tw`bg-green-600 px-2.5 py-1 rounded-md mr-2`}>
@@ -83,9 +80,9 @@ const ArenaHeader = ({ arena }) => {
 
       {/* 2. Map & Directions Section */}
       <View style={tw`px-5 mt-6`}>
-          <Text style={tw`text-lg font-bold text-green-900 mb-3`}>Location & Directions</Text>
+          <Text style={tw`text-lg font-bold text-green-900 mb-3`}>Location & Players</Text>
           
-          <View style={tw`rounded-2xl overflow-hidden border border-gray-200 shadow-sm bg-white elevation-3`}>
+          <View style={tw`rounded-2xl overflow-hidden border border-gray-200 shadow-sm bg-white elevation-3 mb-4`}>
               <MapView
                   provider={PROVIDER_GOOGLE}
                   style={tw`w-full h-48`}
@@ -108,7 +105,7 @@ const ArenaHeader = ({ arena }) => {
               <Pressable 
                   onPress={() => openMapsForDirections(location.latitude, location.longitude, arena.arenaName)}
                   style={({pressed}) => tw.style(
-                      `flex-row items-center justify-center py-3.5`,
+                      `flex-row items-center justify-center py-3.5 border-t border-gray-100`,
                       pressed ? `bg-green-800` : `bg-green-700`
                   )}
               >
@@ -116,6 +113,26 @@ const ArenaHeader = ({ arena }) => {
                   <Text style={tw`text-white font-bold text-base tracking-wide`}>Get Directions</Text>
               </Pressable>
           </View>
+
+          {/* 🔥 NEW BUTTON: FIND PLAYERS NEAR ARENA */}
+          {/* Note: Path starts with / so it goes to root -> player -> home -> nearby-players */}
+          <Link 
+            href={{
+                pathname: '/(player)/home/nearby-players',
+                params: { 
+                    arenaLat: location.latitude, 
+                    arenaLng: location.longitude, 
+                    arenaName: arena.arenaName || arena.name 
+                }
+            }}
+            asChild
+          >
+            <Pressable style={tw`bg-white border border-green-600 flex-row items-center justify-center p-3.5 rounded-xl shadow-sm`}>
+                <Ionicons name="people" size={22} color="#15803d" style={tw`mr-2`} />
+                <Text style={tw`text-green-700 font-bold text-base`}>Find Players Near Arena</Text>
+            </Pressable>
+          </Link>
+
       </View>
 
       <Text style={tw`text-xl font-bold text-green-900 px-5 mt-8 mb-2`}>
@@ -126,13 +143,11 @@ const ArenaHeader = ({ arena }) => {
 };
 
 export default function OwnerDetailsScreen() {
-  // `courtId` param receive kar rahe hain taake us par scroll kar sakein
   const { ownerId, courtId } = useLocalSearchParams();
   const [arena, setArena] = useState(null);
   const [courts, setCourts] = useState([]); 
   const [loading, setLoading] = useState(true);
   
-  // Reference for Auto Scrolling
   const flatListRef = useRef(null);
 
   useEffect(() => {
@@ -174,26 +189,23 @@ export default function OwnerDetailsScreen() {
     fetchData();
   }, [ownerId]);
 
-  // 🔥 AUTO SCROLL EFFECT
+  // AUTO SCROLL EFFECT
   useEffect(() => {
-    // Jab loading khatam ho, courts aa jayen, aur hamare paas 'courtId' ho
     if (!loading && courts.length > 0 && courtId && flatListRef.current) {
         const index = courts.findIndex(c => c.id === courtId);
         
         if (index !== -1) {
-            // Thoda sa delay taake list render ho chuki ho
             setTimeout(() => {
                 flatListRef.current.scrollToIndex({ 
                     index: index, 
                     animated: true, 
-                    viewPosition: 0 // 0 means top of the screen
+                    viewPosition: 0
                 });
             }, 500); 
         }
     }
   }, [loading, courts, courtId]);
 
-  // Handle scroll failure (sometimes needed for lists with headers)
   const onScrollToIndexFailed = (info) => {
     const wait = new Promise(resolve => setTimeout(resolve, 500));
     wait.then(() => {
@@ -224,21 +236,20 @@ export default function OwnerDetailsScreen() {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       
       <FlatList
-        ref={flatListRef} // Ref joda
+        ref={flatListRef}
         data={courts}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          // Agar ye wo specific court hai, to highlight border dikha sakte hain (Optional)
           <View style={tw.style(
              `px-5 mb-4`,
              item.id === courtId ? `border-2 border-green-500 rounded-xl p-1 bg-green-50` : ``
           )}>
-             <CourtCard court={item} /> 
+              <CourtCard court={item} /> 
           </View>
         )}
         contentContainerStyle={tw`pb-32`} 
         ListHeaderComponent={() => <ArenaHeader arena={arena} />}
-        onScrollToIndexFailed={onScrollToIndexFailed} // Error handling for scroll
+        onScrollToIndexFailed={onScrollToIndexFailed}
         ListEmptyComponent={
           <View style={tw`items-center justify-center mt-10 p-5`}>
             <View style={tw`bg-green-100 p-4 rounded-full mb-3`}>

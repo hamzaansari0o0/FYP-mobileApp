@@ -1,4 +1,4 @@
-import { Ionicons, MaterialIcons } from '@expo/vector-icons'; // MaterialIcons added
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Link, Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import {
   collection,
@@ -11,7 +11,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator, Alert,
   Linking,
-  Platform, // Added
+  Platform,
   Pressable, SectionList, StatusBar,
   Text,
   View
@@ -20,7 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
 import { db } from '../../../../firebase/firebaseConfig';
 
-// === 🔥 1. MAP OPENING LOGIC (From History Screen) ===
+// === 1. MAP OPENING LOGIC ===
 const openMapsForDirections = (lat, lng, label) => {
     const scheme = Platform.select({ ios: 'maps:0,0?q=', android: 'geo:0,0?q=' });
     const latLng = `${lat},${lng}`;
@@ -169,13 +169,14 @@ const PlayerMatchCard = ({ match }) => {
 
 // === MAIN COMPONENT ===
 export default function TournamentDetailsScreen() {
-  const { tournamentId } = useLocalSearchParams(); 
+  const { tournamentId } = useLocalSearchParams(); // Ensure filename is [tournamentId].jsx not [tournamentsId].jsx to match, or use param correctly
   const router = useRouter();
   
   const [tournament, setTournament] = useState(null);
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [loadingMap, setLoadingMap] = useState(false); // 🔥 For Map Loading
+  const [loadingMap, setLoadingMap] = useState(false);
+  const [registeredTeamsCount, setRegisteredTeamsCount] = useState(0);
 
   // --- Fetch Data ---
   useEffect(() => {
@@ -184,6 +185,7 @@ export default function TournamentDetailsScreen() {
     const fetchAllData = async () => {
       setLoading(true);
       try {
+        // 1. Fetch Tournament Details
         const docRef = doc(db, 'tournaments', tournamentId);
         const docSnap = await getDoc(docRef);
         
@@ -191,6 +193,7 @@ export default function TournamentDetailsScreen() {
           const tourData = { id: docSnap.id, ...docSnap.data() };
           setTournament(tourData);
 
+          // 2. Fetch Matches (if live/completed)
           if (tourData.status === 'live' || tourData.status === 'completed') {
             const matchesQuery = query(
               collection(db, 'tournamentMatches'),
@@ -202,6 +205,17 @@ export default function TournamentDetailsScreen() {
             const matchesList = matchesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setMatches(matchesList);
           }
+
+          // 🔥 3. FIX: Fetch Registered Teams Count
+          // Collection Name Corrected: 'tournamentRegistrations' (singular 'tournament')
+          const registrationQuery = query(
+            collection(db, 'tournamentRegistrations'), 
+            where('tournamentId', '==', tournamentId)
+          );
+          const registrationSnap = await getDocs(registrationQuery);
+          // console.log("Registrations Found:", registrationSnap.size); // Debugging
+          setRegisteredTeamsCount(registrationSnap.size);
+
         } else {
           Alert.alert("Error", "Tournament not found.");
           router.back();
@@ -229,7 +243,7 @@ export default function TournamentDetailsScreen() {
     return Object.values(groups);
   }, [matches]);
 
-  // === 🔥 7. NEW: Handle Get Direction Logic ===
+  // === Handle Get Direction Logic ===
   const handleGetDirection = async () => {
     if (!tournament) return;
     setLoadingMap(true);
@@ -239,14 +253,12 @@ export default function TournamentDetailsScreen() {
         let lng = tournament.location?.longitude;
         const arenaName = tournament.arenaName || "Arena";
 
-        // 1. Agar tournament me location already hai
         if (lat && lng) {
             openMapsForDirections(lat, lng, arenaName);
             setLoadingMap(false);
             return;
         }
 
-        // 2. Agar nahi, to Arena Owner se fetch kro (using arenaId)
         if (tournament.arenaId) {
             const ownerRef = doc(db, "users", tournament.arenaId);
             const ownerSnap = await getDoc(ownerRef);
@@ -264,7 +276,6 @@ export default function TournamentDetailsScreen() {
                 Alert.alert("Error", "Arena details not found.");
             }
         } else {
-            // 3. Fallback: Address Search
              const address = tournament.arenaAddress || arenaName;
              const url = Platform.select({
                 ios: `maps:0,0?q=${encodeURIComponent(address)}`,
@@ -298,7 +309,6 @@ export default function TournamentDetailsScreen() {
 
   return (
     <SafeAreaView style={tw`flex-1 bg-green-800`}>
-      {/* HEADER HIDE KARNE WALI LINE */}
       <Stack.Screen options={{ headerShown: false }} /> 
 
       <StatusBar barStyle="light-content" backgroundColor="#166534" />
@@ -321,7 +331,6 @@ export default function TournamentDetailsScreen() {
         <SectionList
           sections={groupedMatches}
           keyExtractor={(item) => item.id}
-          // Added pb-32 to give space for scrolling
           contentContainerStyle={tw`p-5 pb-32`} 
           stickySectionHeadersEnabled={false}
           showsVerticalScrollIndicator={false}
@@ -333,7 +342,6 @@ export default function TournamentDetailsScreen() {
                 {tournament.tournamentName}
               </Text>
               
-              {/* ✅ HOST INFO & GET DIRECTION BUTTON */}
               <View style={tw`flex-row items-center justify-between mb-6`}>
                  <View style={tw`flex-row items-center flex-1 mr-2`}>
                     <Ionicons name="location-outline" size={18} color="gray" />
@@ -342,7 +350,6 @@ export default function TournamentDetailsScreen() {
                     </Text>
                  </View>
                  
-                 {/* 🔥 UPDATED DIRECTION BUTTON (BLUE PILL STYLE) */}
                  <Pressable 
                     onPress={handleGetDirection}
                     disabled={loadingMap}
@@ -381,6 +388,8 @@ export default function TournamentDetailsScreen() {
                         <DetailRow icon="calendar" label="Date" value={moment(tournament.startDate.toDate()).format('D MMM')} />
                         <DetailRow icon="layers" label="Type" value={tournament.format} />
                         <DetailRow icon="cash" label="Entry" value={`₹${tournament.entryFee}`} />
+                        {/* Displaying Count */}
+                        <DetailRow icon="stats-chart" label="Teams Joined" value={`${registeredTeamsCount}`} />
                     </View>
                 </View>
               </View>

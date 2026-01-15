@@ -5,7 +5,8 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+// 👇 Added 'deleteField' here
+import { deleteField, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { auth, db } from '../firebase/firebaseConfig';
 import { registerForPushNotificationsAsync } from '../utils/notifications';
@@ -84,7 +85,7 @@ export function AuthProvider({ children }) {
     return () => unsubscribe(); 
   }, []);
 
-  // === SIGNUP FUNCTION (UPDATED) ===
+  // === SIGNUP FUNCTION ===
   const signup = async (formData, selectedRole) => {
     const { 
         email, password, name, mobileNumber, city, 
@@ -121,8 +122,7 @@ export function AuthProvider({ children }) {
       throw new Error("User created, but failed to send verification email.");
     }
 
-    // 👇 MAIN FIX: Force Logout immediately after signup
-    // Taake background session khatam ho jaye aur Login page par fresh login ho sake.
+    // Force Logout immediately after signup
     await signOut(auth);
   };
 
@@ -138,7 +138,7 @@ export function AuthProvider({ children }) {
     await loggedInUser.reload();
     
     if (!loggedInUser.emailVerified) {
-      await signOut(auth); // Agar verify nahi hai to wapis bahar phenk do
+      await signOut(auth); 
       throw new Error("auth/email-not-verified");
     }
 
@@ -154,12 +154,37 @@ export function AuthProvider({ children }) {
       throw new Error("auth/user-disabled");
     }
 
-    // Login Successful
+    // Login Successful & Update Token
     await saveUserPushToken(loggedInUser.uid);
   };
 
+  // === UPDATED LOGOUT FUNCTION ===
   const logout = async () => {
-    await signOut(auth);
+    try {
+      const currentUser = auth.currentUser;
+      
+      if (currentUser) {
+        // 🔥 Remove Push Token from Firestore so notifications stop on this device
+        const userRef = doc(db, 'users', currentUser.uid);
+        await updateDoc(userRef, {
+          pushToken: deleteField() 
+        });
+      }
+      
+      // Now Sign Out
+      await signOut(auth);
+      
+      // Reset State
+      setUser(null);
+      setUserData(null);
+      setRole(null);
+      
+    } catch (error) {
+      console.error("Logout Error:", error);
+      // Fallback: Ensure signout happens even if DB fails
+      await signOut(auth);
+      setUser(null);
+    }
   };
 
   const value = {

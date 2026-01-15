@@ -15,15 +15,18 @@ export default function HomeStackLayout() {
         }}
       />
 
-      {/* 2. Specific Pages (Tabs Hidden via Parent Logic) */}
+      {/* 2. Specific Pages */}
       <Stack.Screen
         name="howItWorks"
         options={{ headerShown: false }}
       />
       
+      {/* ❌ "introduction" wala block yahan se DELETE kar diya hai kyunki file nahi thi */}
+      {/* Agar aapko Introduction dikhana hai to 'about' screen use ho rahi hai */}
+
       <Stack.Screen
-        name="introduction" // Make sure file name matches this
-        options={{ headerShown: false }}
+        name="about" 
+        options={{ headerShown: false }} 
       />
 
       {/* 3. Details Screens */}
@@ -35,6 +38,11 @@ export default function HomeStackLayout() {
       <Stack.Screen
         name="ownerDetails/[ownerId]"
         options={{ headerShown: false, title: "Owner's Courts" }}
+      />
+
+      <Stack.Screen
+        name="nearby-players"
+        options={{ headerShown: false, title: "Nearby Players" }}
       />
 
       <Stack.Screen
